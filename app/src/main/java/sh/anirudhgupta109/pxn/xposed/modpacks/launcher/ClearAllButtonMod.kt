@@ -3,6 +3,8 @@ package sh.anirudhgupta109.pxn.xposed.modpacks.launcher
 import android.content.Context
 import android.content.res.ColorStateList
 import android.content.res.Resources
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -24,18 +26,13 @@ import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
 /**
  * Adds a floating "clear all" button to the Recents screen.
  *
- * When the `RecentClearAllReposition` preference is on, the pack injects a
- * second [FrameLayout] button into `OverviewActionsView` during
- * `onFinishInflate`, pins it to the end/top edge of the screen, and wires its
- * click to the launcher's own `RecentsView.dismissAllTasks` through a
- * reflective [Method] captured at hook-registration time. The button mirrors
- * the system's visibility by re-applying every `RecentsView.setVisibility`
- * argument to itself, and re-tints its icon on `setColorTint` so it tracks
- * light/dark mode.
+ * Two looks, chosen by the `RecentClearAllLegacyStyle` preference:
+ *  - off (default): the original Next-MOD look, a bare tinted icon;
+ *  - on: the round look of the old PixelXpert build, a 44dp circle with
+ *    a semi-transparent black fill and a white icon.
  *
- * Flipping the preference kills the launcher process so the hooks re-register
- * in the new configuration; the icon is read from the module's own resources
- * via [XPLauncher.moduleResources] rather than the launcher's.
+ * The button is only added when `RecentClearAllReposition` is on. Flipping either
+ * preference kills the launcher process so the hooks re-register in the new configuration.
  */
 @LauncherModPack
 class ClearAllButtonMod(context: Context) : XposedModPack(context) {
@@ -44,11 +41,12 @@ class ClearAllButtonMod(context: Context) : XposedModPack(context) {
 	private var clearAllButton: FrameLayout? = null
 
 	override fun onPreferenceUpdated(vararg key: String?) {
-		if (key.isNotEmpty() && key[0] == "RecentClearAllReposition") {
+		if (key.isNotEmpty() && (key[0] == "RecentClearAllReposition" || key[0] == "RecentClearAllLegacyStyle")) {
 			SystemUtils.killSelf()
 		}
 
 		RecentClearAllReposition = Xprefs.getBoolean("RecentClearAllReposition", false)
+		RecentClearAllLegacyStyle = Xprefs.getBoolean("RecentClearAllLegacyStyle", false)
 	}
 
 	override fun onPackageLoaded(PRParam: XposedModuleInterface.PackageReadyParam) {
@@ -63,9 +61,9 @@ class ClearAllButtonMod(context: Context) : XposedModPack(context) {
 		RecentsViewClass
 			.after("setColorTint")
 			.run { param ->
-				if (!RecentClearAllReposition) return@run
+				if (!RecentClearAllReposition || RecentClearAllLegacyStyle) return@run
 
-				clearAllIcon!!.drawable.setTintList(getThemedColor(mContext))
+				clearAllIcon?.drawable?.setTintList(getThemedColor(mContext))
 			}
 
 		RecentsViewClass
@@ -85,16 +83,36 @@ class ClearAllButtonMod(context: Context) : XposedModPack(context) {
 
 				clearAllIcon = ImageView(mContext)
 				clearAllIcon!!.setImageDrawable(ResourcesCompat.getDrawable(XPLauncher.moduleResources!!, R.drawable.ic_clear_all, mContext.theme))
-				clearAllIcon!!.drawable.setTintList(getThemedColor(mContext))
-				clearAllButton!!.addView(clearAllIcon)
 
-				val params = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+				val params: FrameLayout.LayoutParams
+				if (RecentClearAllLegacyStyle) {
+					// Round look: 44dp circle, 60% black fill, white icon, 10dp padding, 8dp elevation.
+					val size = dp(44f)
+					val padding = dp(10f)
 
-				params.rightMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 16f, Resources.getSystem().displayMetrics).toInt()
+					clearAllIcon!!.drawable.setTintList(ColorStateList.valueOf(Color.WHITE))
+					clearAllIcon!!.setPadding(padding, padding, padding, padding)
+
+					val background = GradientDrawable()
+					background.shape = GradientDrawable.OVAL
+					background.setColor(0x99000000.toInt())
+					clearAllButton!!.background = background
+					clearAllButton!!.elevation = dp(8f).toFloat()
+
+					clearAllButton!!.addView(clearAllIcon, FrameLayout.LayoutParams(size, size))
+					params = FrameLayout.LayoutParams(size, size)
+					params.rightMargin = dp(16f)
+				} else {
+					clearAllIcon!!.drawable.setTintList(getThemedColor(mContext))
+					clearAllButton!!.addView(clearAllIcon)
+					params = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+					params.rightMargin = dp(16f)
+				}
 
 				params.gravity = Gravity.END or Gravity.CENTER_VERTICAL
 
 				clearAllButton!!.layoutParams = params
+				clearAllButton!!.isClickable = true
 				clearAllButton!!.setOnClickListener { v ->
 					if (recentView != null) {
 						try {
@@ -104,7 +122,6 @@ class ClearAllButtonMod(context: Context) : XposedModPack(context) {
 					}
 				}
 
-//				clearAllButton.setPadding(margins/2,0,margins/2,0);
 				val parent = param.thisObject as FrameLayout
 				parent.layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT //resize to whole screen
 				parent.addView(clearAllButton)
@@ -112,8 +129,12 @@ class ClearAllButtonMod(context: Context) : XposedModPack(context) {
 			}
 	}
 
+	private fun dp(value: Float): Int =
+		TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, Resources.getSystem().displayMetrics).toInt()
+
 	companion object {
 		private var RecentClearAllReposition = false
+		private var RecentClearAllLegacyStyle = false
 
 		@JvmStatic
 		fun getThemedColor(context: Context): ColorStateList? = getSystemAttrColor(

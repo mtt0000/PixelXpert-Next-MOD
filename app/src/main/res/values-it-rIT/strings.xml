@@ -565,4 +565,33 @@
     <string name="hook_audit_copied">Report copied to clipboard</string>
     <string name="hook_audit_waiting">Waiting for hooked processes to reply…</string>
     <string name="hook_audit_waiting_desc">Ensure the module is enabled in LSPosed, target apps are selected in scope, and they have been restarted. Tap Refresh to request audit. A SystemUI restart might be needed!</string>
+
+    <!--Custom Settings (added by the hide/kill/clipboard feature set)-->
+    <string name="custom_header">Impostazioni personalizzate</string>
+    <string name="custom_header_summary">Condivisione negli appunti, pulsanti Recenti e app nascoste</string>
+    <string name="custom_share_category">Menu Condividi</string>
+    <string name="custom_recents_category">Recenti</string>
+    <string name="clipboard_share_title">Copia negli appunti dal menu Condividi</string>
+    <string name="clipboard_share_summary">Aggiunge \"Copia contenuto negli appunti\" al menu di condivisione di Android</string>
+    <string name="clipboard_share_label">Copia contenuto negli appunti</string>
+    <string name="clipboard_share_done">Copiato negli appunti</string>
+    <string name="clipboard_share_nothing">Nessun contenuto da copiare</string>
+    <string name="clipboard_share_failed">Impossibile accedere agli appunti</string>
+    <string name="clear_all_legacy_style_title">Pulsante \"Cancella tutto\" rotondo</string>
+    <string name="clear_all_legacy_style_summary">Pulsante nero rotondo invece della sola icona. Funziona insieme a \"Riposiziona cancella tutto\" in Diverse. Riavvia il launcher.</string>
+    <string name="kill_app_title">Pulsante chiudi app</string>
+    <string name="kill_app_summary">Aggiunge su ogni scheda dei Recenti un pulsante che forza l\'arresto dell\'app e rimuove la scheda</string>
+    <string name="hide_app_title">Pulsante nascondi app</string>
+    <string name="hide_app_summary">Aggiunge su ogni scheda dei Recenti un pulsante che nasconde l\'app dai Recenti</string>
+    <string name="hidden_apps_title">App nascoste</string>
+    <string name="hidden_apps_summary">App nascoste dai Recenti. Mostrale di nuovo o nascondine altre</string>
+    <string name="hidden_apps_empty">Nessuna app nascosta</string>
+    <string name="hidden_apps_dialog_title">App nascoste - tocca un\'app per mostrarla di nuovo</string>
+    <string name="hidden_apps_show_all">Mostra tutte</string>
+    <string name="hidden_apps_unhide">Mostra</string>
+    <string name="hidden_apps_add">Nascondi un\'app</string>
+    <string name="hidden_apps_add_title">Scegli l\'app da nascondere</string>
+    <string name="hide_app_toast">%1$s nascosta dai Recenti</string>
+    <string name="hidden_apps_unhidden_toast">%1$s riapparirà alla prossima apertura dei Recenti</string>
+    <string name="hidden_apps_all_unhidden_toast">Tutte le app riappariranno alla prossima apertura dei Recenti</string>
 </resources>

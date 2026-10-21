@@ -833,6 +833,7 @@ private fun SwitchItem(node: SwitchPref, store: PrefStore) {
 			"AlternativeThemedAppIcon" -> iconFlip = value == "true"
 			"AutoUpdate" -> UpdateScheduler.scheduleUpdates(context)
 			"SyncNTPTime" -> TimeSyncScheduler.scheduleTimeSync(context)
+			"ClipboardShareEnabled" -> setClipboardShareEnabled(context, value == "true")
 		}
 	}
 

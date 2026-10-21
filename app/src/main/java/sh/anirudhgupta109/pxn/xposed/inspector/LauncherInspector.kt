@@ -34,6 +34,24 @@ object LauncherInspector {
 			)
 		)
 
+		launcherItems.add(
+			InspectionUtils.checkClass(
+				classLoader,
+				"com.android.quickstep.views.RecentsView",
+				"RecentsView (Kill / Hide app buttons)",
+				utilized = true,
+			)
+		)
+
+		launcherItems.add(
+			InspectionUtils.checkClass(
+				classLoader,
+				"com.android.quickstep.views.TaskView",
+				"TaskView (Kill / Hide app buttons)",
+				utilized = true,
+			)
+		)
+
 		var launcherClass = InspectionUtils.checkClass(
 			classLoader,
 			"com.android.launcher3.Launcher",

@@ -9,6 +9,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import sh.anirudhgupta109.pxn.R
+import sh.anirudhgupta109.pxn.ClipboardShareActivity
+import sh.anirudhgupta109.pxn.data.PrefStore
 import sh.anirudhgupta109.pxn.util.NTPTimeSyncer
 
 /**
@@ -101,4 +103,28 @@ private fun Context.findActivity(): Activity? = when (this) {
 	is Activity -> this
 	is ContextWrapper -> baseContext.findActivity()
 	else -> null
+}
+
+/**
+ * Switches the share-sheet target `ClipboardShareActivity` on or off.
+ * The manifest declares it enabled; this is what the "Custom Settings" switch drives.
+ */
+internal fun setClipboardShareEnabled(context: Context, enabled: Boolean) {
+	try {
+		context.packageManager.setComponentEnabledSetting(
+			ComponentName(context, ClipboardShareActivity::class.java),
+			if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+			else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+			PackageManager.DONT_KILL_APP,
+		)
+	} catch (ignored: Exception) {
+	}
+}
+
+/** Re-applies the saved `ClipboardShareEnabled` value; called once from PxnApp.onCreate. */
+internal fun syncClipboardShareComponent(context: Context) {
+	try {
+		setClipboardShareEnabled(context, PrefStore.open(context).getBoolean("ClipboardShareEnabled", true))
+	} catch (ignored: Exception) {
+	}
 }
