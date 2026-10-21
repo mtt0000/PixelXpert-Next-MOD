@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -25,8 +25,16 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build APK
-        run: ./gradlew assembleDebug
+      - name: Build APK and ZIP
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          # Package the debug apk as Magisk module zip
+          mkdir -p output
+          cd MagiskModBase
+          zip -r ../output/PixelXpert-Next.zip ./*
+          cd ..
+          zip -j output/PixelXpert-Next.zip app/build/outputs/apk/debug/PixelXpert-Next.apk
 
       - name: Delete existing release and tag
         env:
@@ -43,6 +51,8 @@ jobs:
           body: |
             Automated build for branch `${{ github.ref_name }}`.
             Commit: ${{ github.sha }}
-          files: app/build/outputs/apk/debug/*.apk
+          files: |
+            app/build/outputs/apk/debug/*.apk
+            output/PixelXpert-Next.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
