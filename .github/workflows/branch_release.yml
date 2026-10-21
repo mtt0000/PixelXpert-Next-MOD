@@ -29,12 +29,24 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
+
           # Package the debug apk as Magisk module zip
           mkdir -p output
-          cd MagiskModBase
+
+          # Copy MagiskModBase files to a staging directory to zip them properly
+          cp -r MagiskModBase staging
+
+          # Find the debug APK and copy it to the staging directory with the exact name expected by the script
+          APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          cp "$APK_PATH" staging/PixelXpert-Next.apk
+
+          # Create the zip file from the staging directory
+          cd staging
           zip -r ../output/PixelXpert-Next.zip ./*
           cd ..
-          zip -j output/PixelXpert-Next.zip app/build/outputs/apk/debug/PixelXpert-Next.apk
+
+          # Clean up
+          rm -rf staging
 
       - name: Delete existing release and tag
         env:
