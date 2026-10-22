@@ -1,21 +1,23 @@
 name: Build KernelSU module
 
-# Builds the release APK and the flashable PixelXpert-Next.zip (Magisk module
-# format, flashable from KernelSU / Magisk / APatch managers) and publishes
-# both as workflow artifacts. Needs no secrets: without SIGNING_KEY the APK is
-# signed with a CI key that is cached between runs, so consecutive builds can
-# update each other.
+# The only build workflow of this fork. On every commit to any branch (and on
+# manual runs) it builds the release APK and the flashable
+# PixelXpert-Next.zip (Magisk module format: KernelSU / KernelSU Next /
+# Magisk / APatch), then replaces that branch's GitHub release with a single
+# one for the latest commit carrying the zip. Flashing the zip also installs
+# the APK (MagiskModBase/customize.sh).
+#
+# Needs no secrets: without SIGNING_KEY the APK is signed with a CI key that
+# is cached between runs, so consecutive builds can update each other.
 
 on:
   push:
     branches:
-      - 'main'
-      - 'ccr-9873c1c0-uaqiit'
-      - 'feature/custom-settings-ci'
-    paths-ignore:
-      - '**.md'
+      - '**'
   workflow_dispatch:
 
+# A newer commit on the same branch cancels the older build, so the release
+# always ends up matching the branch head.
 concurrency:
   group: build-module-${{ github.ref }}
   cancel-in-progress: true
@@ -25,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: read
+      contents: write
 
     env:
       HAS_SIGNING_KEY: ${{ secrets.SIGNING_KEY != '' }}
@@ -108,6 +110,15 @@ jobs:
           echo "SIGNING=CI key from the Actions cache (no SIGNING_KEY secret)" >> "$GITHUB_ENV"
         fi
 
+    # versionCode = the committed one + this workflow's run number, so every
+    # build is newer than the last and the root manager shows it as an update.
+    - name: Version from run number
+      run: |
+        BASE=$(sed -n 's/^VERSION_CODE=//p' version.properties)
+        CODE=$((BASE + GITHUB_RUN_NUMBER))
+        sed -i "s/^VERSION_CODE=.*/VERSION_CODE=$CODE/" version.properties
+        echo "Base versionCode $BASE, this build $((CODE + 1))"
+
     - name: Gradle Build
       run: |
         chmod +x gradlew
@@ -188,3 +199,48 @@ jobs:
         path: app/build/outputs/apk/release/PixelXpert-Next.apk
         retention-days: 30
         if-no-files-found: error
+
+    - name: Replace the branch release
+      if: github.ref_type == 'branch'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BRANCH: ${{ github.ref_name }}
+      run: |
+        set -e
+        TAG="build-$(echo "$BRANCH" | tr '/ ' '--')"
+        # Earlier naming of the same per-branch release, cleaned up too.
+        LEGACY_TAG="release-$BRANCH"
+
+        for t in "$TAG" "$LEGACY_TAG"; do
+          if gh release view "$t" > /dev/null 2>&1; then
+            echo "Deleting release $t"
+            gh release delete "$t" --cleanup-tag --yes
+          fi
+          # A tag left behind without its release would pin the new one to an old commit.
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$t" > /dev/null 2>&1 || true
+        done
+
+        VERSION=$(sed -n 's/^version=//p' MagiskModBase/module.prop)
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        SUBJECT=$(git log -1 --format=%s)
+        {
+          echo "Automated build of branch \`$BRANCH\` at $GITHUB_SHA."
+          echo ""
+          echo "Last commit: $SUBJECT"
+          echo ""
+          echo "Module version: \`$VERSION\`. Signing: $SIGNING."
+          echo ""
+          echo "Install: KernelSU Next (or KernelSU / Magisk / APatch) > Modules > Install from storage > PixelXpert-Next.zip, then reboot. Flashing also installs the PixelXpert-Next app; if that fails the module retries at boot."
+        } > release-notes.md
+
+        PRERELEASE=""
+        if [ "$BRANCH" != "${{ github.event.repository.default_branch }}" ]; then
+          PRERELEASE="--prerelease"
+        fi
+
+        gh release create "$TAG" output/PixelXpert-Next.zip \
+          --target "$GITHUB_SHA" \
+          --title "PixelXpert-Next $VERSION ($BRANCH @ $SHORT_SHA)" \
+          --notes-file release-notes.md \
+          $PRERELEASE
+        echo "Release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
