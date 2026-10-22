@@ -2,17 +2,22 @@ package sh.anirudhgupta109.pxn.xposed.modpacks.launcher
 
 import android.app.AlertDialog
 import android.content.Context
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.core.content.res.ResourcesCompat
 import de.robv.android.xposed.XposedHelpers
 import io.github.libxposed.api.XposedModuleInterface
 import java.util.concurrent.Executors
 import sh.anirudhgupta109.pxn.R
 import sh.anirudhgupta109.pxn.util.HiddenApps
+import sh.anirudhgupta109.pxn.xposed.XPLauncher
 import sh.anirudhgupta109.pxn.xposed.XPrefs.Xprefs
 import sh.anirudhgupta109.pxn.xposed.XposedModPack
 import sh.anirudhgupta109.pxn.xposed.annotations.LauncherModPack
@@ -76,7 +81,15 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 	 * open app hidden there are no cards, and the launcher hides the whole
 	 * actions bar, [manageButton] included.
 	 */
-	private var emptyStateButton: ImageButton? = null
+	private var emptyStateButton: TextView? = null
+
+	/**
+	 * Full-size, touch-transparent layer holding [emptyStateButton]. The drag
+	 * layer converts a child's FrameLayout params into its own type and drops
+	 * gravity and margins on the way (the button landed in the top-left
+	 * corner), so the button is positioned inside this layer instead.
+	 */
+	private var emptyStateLayer: FrameLayout? = null
 	private var emptyStateQueued = false
 	private var recentsRef: java.lang.ref.WeakReference<ViewGroup>? = null
 
@@ -349,28 +362,18 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 		}
 
 		val target = if (alpha > 0.05f) View.VISIBLE else View.GONE
+		val layer = emptyStateLayer
 		if (target == View.VISIBLE) {
-			// The navigation bar can change (gestures / 3 buttons, rotation).
-			val params = button.layoutParams as? FrameLayout.LayoutParams
-			val margin = emptyStateBottomMargin(button.parent as? View ?: recents)
-			if (params != null && params.bottomMargin != margin) {
-				params.bottomMargin = margin
-				button.layoutParams = params
-			}
+			val label = emptyStateLabel()
+			if (button.text.toString() != label) button.text = label
 		}
-		if (button.visibility != target) button.visibility = target
+		if (layer != null && layer.visibility != target) layer.visibility = target
 		if (target == View.VISIBLE && kotlin.math.abs(button.alpha - alpha) > 0.01f) button.alpha = alpha
 	}
 
-	/** Navigation bar height plus a 32dp gap. */
-	private fun emptyStateBottomMargin(view: View): Int {
-		val navBar = try {
-			view.rootWindowInsets?.getInsets(android.view.WindowInsets.Type.navigationBars())?.bottom ?: 0
-		} catch (ignored: Throwable) {
-			0
-		}
-		return navBar + RecentsTaskTools.dp(view.context, 32f)
-	}
+	/** "Hidden apps (N)". */
+	private fun emptyStateLabel(): String =
+		RecentsTaskTools.moduleString(R.string.hidden_apps_title) + " (" + hidden.size + ")"
 
 	/** Opacity of Recents' content: its own alpha (and its parents') times its content alpha. */
 	private fun recentsAlpha(recents: ViewGroup): Float {
@@ -414,31 +417,70 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 
 
 	/**
-	 * The empty-state button goes into Recents' parent (the launcher's drag
-	 * layer), at the bottom centre: where the actions bar sits when there are
-	 * cards, clear of the navigation bar.
+	 * The empty-state button: a horizontal pill (eye icon + "Hidden apps (N)")
+	 * centred horizontally at 5/6 of the screen height, below Recents' "no
+	 * recent items" message. It lives in [emptyStateLayer], added to Recents'
+	 * parent (the launcher's drag layer).
 	 */
 	private fun addEmptyStateButton(recents: ViewGroup) {
 		if (emptyStateButton != null) return
-		val parent = recents.parent as? FrameLayout
+		val parent = recents.parent as? ViewGroup
 		if (parent == null) {
-			Logger.log(RecentsTaskTools.LOG + "Recents parent is not a FrameLayout, no empty state button")
+			Logger.log(RecentsTaskTools.LOG + "Recents has no parent, no empty state button")
 			return
 		}
 
 		val ctx = recents.context
-		val button = RecentsTaskTools.createRoundButton(ctx, R.drawable.ic_manage_hidden, TaskButtonsHost.TAG_PREFIX + "manage_empty", 14)
-		val size = RecentsTaskTools.dp(ctx, 56f)
-		val params = FrameLayout.LayoutParams(size, size)
-		params.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-		params.bottomMargin = emptyStateBottomMargin(parent)
+		val layer = FrameLayout(ctx)
+		layer.isClickable = false
+		layer.isFocusable = false
+
+		val button = TextView(ctx)
+		button.tag = TaskButtonsHost.TAG_PREFIX + "manage_empty"
+		button.text = emptyStateLabel()
+		button.setTextColor(Color.WHITE)
+		button.textSize = 16f
+		button.gravity = Gravity.CENTER
+		button.maxLines = 1
+		val padH = RecentsTaskTools.dp(ctx, 24f)
+		button.setPadding(padH, 0, padH, 0)
+		button.minimumWidth = RecentsTaskTools.dp(ctx, 180f)
+		try {
+			val icon = ResourcesCompat.getDrawable(XPLauncher.moduleResources!!, R.drawable.ic_manage_hidden, ctx.theme)!!.mutate()
+			icon.setTint(Color.WHITE)
+			val iconSize = RecentsTaskTools.dp(ctx, 22f)
+			icon.setBounds(0, 0, iconSize, iconSize)
+			button.setCompoundDrawablesRelative(icon, null, null, null)
+			button.compoundDrawablePadding = RecentsTaskTools.dp(ctx, 10f)
+		} catch (ignored: Throwable) {
+		}
+		val background = GradientDrawable()
+		background.setColor(Color.argb(0x99, 0, 0, 0))
+		background.cornerRadius = RecentsTaskTools.dp(ctx, 28f).toFloat()
+		button.background = background
 		button.elevation = RecentsTaskTools.dp(ctx, 8f).toFloat()
+		button.isClickable = true
+		button.isFocusable = true
 		button.contentDescription = RecentsTaskTools.moduleString(R.string.hidden_apps_title)
 		button.setOnClickListener { showManageDialog(it.context) }
-		button.visibility = View.GONE
 
-		parent.addView(button, params)
+		val params = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, RecentsTaskTools.dp(ctx, 56f))
+		params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+		layer.addView(button, params)
+
+		// Centre of the pill at 5/6 of the layer's height; translation, not a
+		// margin, so placing it does not request another layout.
+		val place = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+			val y = layer.height * 5f / 6f - button.height / 2f
+			if (kotlin.math.abs(button.translationY - y) > 0.5f) button.translationY = y
+		}
+		layer.addOnLayoutChangeListener(place)
+		button.addOnLayoutChangeListener(place)
+
+		layer.visibility = View.GONE
+		parent.addView(layer, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 		TaskButtonsHost.registerExtraButton(button)
+		emptyStateLayer = layer
 		emptyStateButton = button
 		syncEmptyStateButton(recents)
 	}
