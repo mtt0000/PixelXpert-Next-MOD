@@ -392,7 +392,9 @@ object RecentsTaskTools {
 		return args
 	}
 
-	private fun removeTaskById(loader: ClassLoader?, taskId: Int) {
+	/** Removes a task from the system's recents through the launcher's ActivityManagerWrapper. */
+	@JvmStatic
+	fun removeTaskById(loader: ClassLoader?, taskId: Int) {
 		val names = arrayOf(
 			"com.android.systemui.shared.system.ActivityManagerWrapper",
 			"com.android.systemui.shared.recents.system.ActivityManagerWrapper",

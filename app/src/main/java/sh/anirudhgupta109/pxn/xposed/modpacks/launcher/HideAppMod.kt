@@ -59,6 +59,27 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 	private var manageButton: ImageButton? = null
 	private var overlayVisibility = View.GONE
 
+	/**
+	 * Tasks kept out of Recents (task id to package), from the last load plan
+	 * and from cards hidden since. Clear-all closes these too, since their
+	 * cards are not there for the launcher to dismiss.
+	 */
+	@Volatile
+	private var hiddenTasks: Map<Int, String> = emptyMap()
+
+	/** True when the last load plan was left with no card after filtering. */
+	@Volatile
+	private var lastPlanEmpty = false
+
+	/**
+	 * Manage button shown under Recents' "no recent items" message: with every
+	 * open app hidden there are no cards, and the launcher hides the whole
+	 * actions bar, [manageButton] included.
+	 */
+	private var emptyStateButton: ImageButton? = null
+	private var emptyStateQueued = false
+	private var recentsRef: java.lang.ref.WeakReference<ViewGroup>? = null
+
 	override val tag: String = TaskButtonsHost.TAG_PREFIX + "hide"
 	override val slot: Int = 1
 	override val iconRes: Int = R.drawable.ic_hide_app
@@ -109,6 +130,25 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 				overlayVisibility = param.args[0] as Int
 				updateManageButton()
 			}
+
+			// Clear all (the launcher's own button and ClearAllButtonMod's both
+			// end up here) also closes the hidden apps.
+			TaskButtonsHost.hookInHierarchy(recentsClazz, "dismissAllTasks", false) { _ ->
+				closeHiddenTasks()
+			}
+
+			recentsViewClass.afterConstruction().run { param ->
+				val recents = param.thisObject as? ViewGroup ?: return@run
+				recentsRef = java.lang.ref.WeakReference(recents)
+				recents.viewTreeObserver.addOnPreDrawListener {
+					try {
+						syncEmptyStateButton(recents)
+					} catch (t: Throwable) {
+						Logger.log(RecentsTaskTools.LOG + "empty state button failed", t)
+					}
+					true
+				}
+			}
 		}
 
 		val overviewActionsViewClass = ReflectedClass.ofIfPossible("com.android.quickstep.views.OverviewActionsView")
@@ -138,13 +178,24 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 		val runningTaskId = runningTaskId()
 
 		val kept = ArrayList<Any?>(groups.size)
+		val removedTasks = LinkedHashMap<Int, String>()
 		for (group in groups) {
 			val tasks = RecentsTaskTools.getTasksOfGroup(group)
 			val packages = tasks.mapNotNull { RecentsTaskTools.packageOfTask(it) }
 			val isRunning = runningTaskId != null && tasks.any { RecentsTaskTools.idOfTask(it) == runningTaskId }
 			val hideIt = !isRunning && packages.isNotEmpty() && packages.all { hiddenNow.contains(it) }
-			if (!hideIt) kept.add(group)
+			if (hideIt) {
+				for (task in tasks) {
+					val id = RecentsTaskTools.idOfTask(task) ?: continue
+					val pkg = RecentsTaskTools.packageOfTask(task) ?: continue
+					removedTasks[id] = pkg
+				}
+			} else {
+				kept.add(group)
+			}
 		}
+		hiddenTasks = removedTasks
+		lastPlanEmpty = kept.isEmpty()
 		if (kept.size != groups.size) {
 			args[index] = kept
 			Logger.log(RecentsTaskTools.LOG + "hidden " + (groups.size - kept.size) + " card(s) from the load plan")
@@ -164,6 +215,29 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 		null
 	}
 
+	/**
+	 * Removes the hidden apps' tasks from the system's recents and drops those
+	 * apps from the hidden list: once closed they have nothing left to hide.
+	 * Apps hidden ahead of time from the settings screen, with no task open,
+	 * stay on the list.
+	 */
+	private fun closeHiddenTasks() {
+		if (!enabled) return
+		val tasks = hiddenTasks
+		if (tasks.isEmpty()) return
+		hiddenTasks = emptyMap()
+
+		val loader = mContext.classLoader
+		prefWriter.execute {
+			for (id in tasks.keys) RecentsTaskTools.removeTaskById(loader, id)
+		}
+
+		val closed = tasks.values.toSet()
+		saveHidden(hidden.filterNot { it in closed })
+		lastPlanEmpty = false
+		Logger.log(RecentsTaskTools.LOG + "clear all closed " + tasks.size + " hidden task(s): " + closed.joinToString())
+	}
+
 	// ---------------------------------------------------------------- card button
 
 	override fun onClick(taskView: ViewGroup) {
@@ -174,6 +248,16 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 			val list = LinkedHashSet(hidden)
 			list.addAll(packages)
 			saveHidden(list)
+
+			// The card goes without its task, so clear-all has to know about it
+			// before Recents next reloads.
+			val tasks = LinkedHashMap(hiddenTasks)
+			for (task in RecentsTaskTools.getTasks(taskView)) {
+				val id = RecentsTaskTools.idOfTask(task) ?: continue
+				val pkg = RecentsTaskTools.packageOfTask(task) ?: continue
+				tasks[id] = pkg
+			}
+			hiddenTasks = tasks
 
 			val label = packages.joinToString { RecentsTaskTools.appLabel(mContext, it) }
 			RecentsTaskTools.toast(mContext, RecentsTaskTools.moduleString(R.string.hide_app_toast, label))
@@ -230,11 +314,118 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 			parent.addView(button, params)
 		}
 
+		TaskButtonsHost.registerExtraButton(button)
 		manageButton = button
 		updateManageButton()
 	}
 
+	/**
+	 * Shows [emptyStateButton] while Recents is on screen with no card left
+	 * because every open app is hidden. Runs before each frame Recents draws,
+	 * so it only touches the button when its state actually changes.
+	 */
+	private fun syncEmptyStateButton(recents: ViewGroup) {
+		// lastPlanEmpty keeps the button away while a non-empty plan is still
+		// turning into cards; hiddenTasks covers the last card hidden by hand,
+		// which empties Recents without a reload.
+		val show = enabled &&
+			hidden.isNotEmpty() &&
+			(lastPlanEmpty || hiddenTasks.isNotEmpty()) &&
+			recents.isShown &&
+			RecentsTaskTools.collectTaskViews(recents).isEmpty()
+		// Recents fades its content in and out (and may keep it at 0 behind the
+		// home screen), so the button follows that opacity.
+		val alpha = if (show) recentsAlpha(recents) else 0f
+
+		val button = emptyStateButton
+		if (button == null) {
+			if (show && !emptyStateQueued) {
+				// Not from inside the pre-draw pass: adding a view there would
+				// change the tree mid-traversal.
+				emptyStateQueued = true
+				recents.post { addEmptyStateButton(recents) }
+			}
+			return
+		}
+
+		val target = if (alpha > 0.05f) View.VISIBLE else View.GONE
+		if (button.visibility != target) button.visibility = target
+		if (target == View.VISIBLE && kotlin.math.abs(button.alpha - alpha) > 0.01f) button.alpha = alpha
+	}
+
+	/** Opacity of Recents' content: its own alpha (and its parents') times its content alpha. */
+	private fun recentsAlpha(recents: ViewGroup): Float {
+		var alpha = 1f
+		var current: View? = recents
+		while (current != null) {
+			alpha *= current.alpha
+			current = current.parent as? View
+		}
+		return alpha * contentAlpha(recents)
+	}
+
+	/** How this build exposes the content alpha: 0 unknown, 1 getter, 2 field, 3 neither. */
+	private var contentAlphaSource = 0
+
+	private fun contentAlpha(recents: ViewGroup): Float {
+		if (contentAlphaSource == 0 || contentAlphaSource == 1) {
+			try {
+				val value = (XposedHelpers.callMethod(recents, "getContentAlpha") as Number).toFloat()
+				contentAlphaSource = 1
+				return value
+			} catch (ignored: Throwable) {
+				if (contentAlphaSource == 1) return 1f
+			}
+		}
+		if (contentAlphaSource == 0 || contentAlphaSource == 2) {
+			try {
+				val value = XposedHelpers.getFloatField(recents, "mContentAlpha")
+				contentAlphaSource = 2
+				return value
+			} catch (ignored: Throwable) {
+				if (contentAlphaSource == 2) return 1f
+			}
+		}
+		if (contentAlphaSource != 3) {
+			contentAlphaSource = 3
+			Logger.log(RecentsTaskTools.LOG + "RecentsView content alpha not readable")
+		}
+		return 1f
+	}
+
+
+	/**
+	 * The empty-state button goes into Recents' parent (the launcher's drag
+	 * layer), centred and a little below the middle, where Recents draws its
+	 * "no recent items" message.
+	 */
+	private fun addEmptyStateButton(recents: ViewGroup) {
+		if (emptyStateButton != null) return
+		val parent = recents.parent as? FrameLayout
+		if (parent == null) {
+			Logger.log(RecentsTaskTools.LOG + "Recents parent is not a FrameLayout, no empty state button")
+			return
+		}
+
+		val ctx = recents.context
+		val button = RecentsTaskTools.createRoundButton(ctx, R.drawable.ic_manage_hidden, TaskButtonsHost.TAG_PREFIX + "manage_empty", 14)
+		val size = RecentsTaskTools.dp(ctx, 56f)
+		val params = FrameLayout.LayoutParams(size, size)
+		params.gravity = Gravity.CENTER
+		params.topMargin = RecentsTaskTools.dp(ctx, 120f)
+		button.elevation = RecentsTaskTools.dp(ctx, 8f).toFloat()
+		button.contentDescription = RecentsTaskTools.moduleString(R.string.hidden_apps_title)
+		button.setOnClickListener { showManageDialog(it.context) }
+		button.visibility = View.GONE
+
+		parent.addView(button, params)
+		TaskButtonsHost.registerExtraButton(button)
+		emptyStateButton = button
+		syncEmptyStateButton(recents)
+	}
+
 	private fun updateManageButton() {
+		recentsRef?.get()?.let { recents -> recents.post { syncEmptyStateButton(recents) } }
 		val button = manageButton ?: return
 		button.post {
 			val show = enabled && hidden.isNotEmpty() && overlayVisibility == View.VISIBLE

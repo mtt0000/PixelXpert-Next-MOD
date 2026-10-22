@@ -50,7 +50,8 @@ object TaskButtonsHost {
 		fun onRefresh(taskView: ViewGroup) {}
 	}
 
-	private class Hit(val button: View, val provider: Provider, val taskView: ViewGroup)
+	/** A button under the finger and what tapping it does. */
+	private class Hit(val button: View, val action: () -> Unit)
 
 	private class Refresher(val recentsView: ViewGroup) : Runnable {
 		var queued = false
@@ -65,6 +66,18 @@ object TaskButtonsHost {
 	private val refreshers = WeakHashMap<ViewGroup, Refresher>()
 	private var installed = false
 	private var pressed: Hit? = null
+
+	/** Buttons outside the cards (manage hidden apps) that get the same tap routing. */
+	private val extraButtons = java.util.Collections.newSetFromMap(WeakHashMap<View, Boolean>())
+
+	/**
+	 * Routes taps on [button] through the hit-test hook too, so the launcher's
+	 * touch controllers cannot swallow them. Its own click listener is what runs.
+	 */
+	@JvmStatic
+	fun registerExtraButton(button: View) {
+		synchronized(extraButtons) { extraButtons.add(button) }
+	}
 
 	@JvmStatic
 	fun register(provider: Provider) {
@@ -292,16 +305,21 @@ object TaskButtonsHost {
 					if (!provider.isEnabled()) continue
 					val button = taskView.findViewWithTag<View>(provider.tag) ?: continue
 					if (button.visibility != View.VISIBLE || !button.isShown || isFadedOut(button)) continue
-					if (contains(button, x, y)) return Hit(button, provider, taskView)
+					if (contains(button, x, y)) return Hit(button) { provider.onClick(taskView) }
 				}
 			}
+		}
+		val extras = synchronized(extraButtons) { extraButtons.toList() }
+		for (button in extras) {
+			if (!button.isAttachedToWindow || button.visibility != View.VISIBLE || !button.isShown || isFadedOut(button)) continue
+			if (contains(button, x, y)) return Hit(button) { button.performClick() }
 		}
 		return null
 	}
 
 	/** @return true when the event belongs to one of our buttons and must be consumed. */
 	private fun handleTouch(event: MotionEvent): Boolean {
-		if (providers.isEmpty()) return false
+		if (providers.isEmpty() && synchronized(extraButtons) { extraButtons.isEmpty() }) return false
 
 		val action = event.actionMasked
 		if (action == MotionEvent.ACTION_DOWN) {
@@ -323,7 +341,7 @@ object TaskButtonsHost {
 				val inside = contains(current.button, event.rawX, event.rawY)
 				current.button.isPressed = false
 				pressed = null
-				if (inside) current.provider.onClick(current.taskView)
+				if (inside) current.action()
 			}
 
 			MotionEvent.ACTION_CANCEL -> {
