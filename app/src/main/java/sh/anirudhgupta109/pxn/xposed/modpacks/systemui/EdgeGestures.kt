@@ -879,7 +879,7 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 
 		val screen = windowManager!!.maximumWindowMetrics.bounds
 		val size = maxOf(screen.width(), screen.height())
-		val params = overlayParams(size, size, touchable = true, type = WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL).apply {
+		val params = overlayParams(size, size, touchable = true, type = navigationBarPanelType()).apply {
 			flags = (flags or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) and
 				WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL.inv()
 			gravity = Gravity.TOP or Gravity.LEFT
@@ -894,6 +894,16 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 		} catch (t: Throwable) {
 			log(t)
 		}
+	}
+
+	/**
+	 * `TYPE_NAVIGATION_BAR_PANEL` - above the status and navigation bars -
+	 * is hidden from the SDK; its value has been FIRST_SYSTEM_WINDOW + 24.
+	 */
+	private fun navigationBarPanelType(): Int = try {
+		getStaticIntField(WindowManager.LayoutParams::class.java, "TYPE_NAVIGATION_BAR_PANEL")
+	} catch (ignored: Throwable) {
+		WindowManager.LayoutParams.FIRST_SYSTEM_WINDOW + 24
 	}
 
 	private fun endBlackout() {
