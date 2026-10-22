@@ -1,0 +1,163 @@
+name: Build KernelSU module
+
+# Builds the release APK and the flashable PixelXpert-Next.zip (Magisk module
+# format, flashable from KernelSU / Magisk / APatch managers) and publishes
+# both as workflow artifacts. Needs no secrets: without SIGNING_KEY the APK is
+# signed with a CI debug key that is cached between runs, so consecutive
+# builds can update each other.
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'ccr-9873c1c0-uaqiit'
+      - 'feature/custom-settings-ci'
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+concurrency:
+  group: build-module-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+    - name: Source Code Download
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: JDK 21 Setup
+      uses: actions/setup-java@v5.2.0
+      with:
+        java-version: '21'
+        distribution: 'jetbrains'
+        cache: gradle
+
+    - name: Android SDK packages
+      run: |
+        SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+        yes | "$SDKM" --licenses > /dev/null || true
+        # compileSdk/targetSdk are 37. The package id has been both
+        # "android-NN" and "android-NN.0", and may only exist on a preview
+        # channel; try each, AGP downloads whatever is still missing.
+        installed=""
+        for channel in 0 1 3; do
+          for pkg in "platforms;android-37" "platforms;android-37.0"; do
+            if "$SDKM" --channel=$channel --install "$pkg" > /dev/null 2>&1; then
+              installed="$pkg (channel $channel)"
+              break 2
+            fi
+          done
+        done
+        echo "Installed platform: ${installed:-none, left to AGP}"
+        "$SDKM" --list_installed 2>/dev/null | grep -E "platforms;|build-tools;" || true
+
+    - name: Signing setup
+      env:
+        SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+        ALIAS: ${{ secrets.ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: |
+        if [ -n "$SIGNING_KEY" ]; then
+          echo "$SIGNING_KEY" | base64 --decode > "$GITHUB_WORKSPACE/ReleaseKey.jks"
+          {
+            echo "storePassword=$KEY_STORE_PASSWORD"
+            echo "keyAlias=$ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "storeFile=$GITHUB_WORKSPACE/ReleaseKey.jks"
+          } > ReleaseKey.properties
+          echo "SIGNING=release key" >> "$GITHUB_ENV"
+        else
+          echo "SIGNING=CI debug key (no SIGNING_KEY secret)" >> "$GITHUB_ENV"
+        fi
+
+    # Without a release key, app/build.gradle.kts signs release with the debug
+    # config. Keeping ~/.android/debug.keystore across runs keeps the
+    # signature stable, so a new zip updates the app installed by an old one.
+    - name: Restore CI debug keystore
+      if: env.SIGNING != 'release key'
+      uses: actions/cache@v4
+      with:
+        path: ~/.android/debug.keystore
+        key: pxn-ci-debug-keystore-v1
+
+    - name: Gradle Build
+      run: |
+        chmod +x gradlew
+        # incrementCanaryVersion writes the version into module.prop; createZip
+        # only mustRunAfter assembleRelease, so both are named explicitly.
+        ./gradlew --no-configuration-cache incrementCanaryVersion assembleRelease createZip -Pchannel=canary
+
+    - name: Validate module zip
+      run: |
+        set -e
+        ZIP=output/PixelXpert-Next.zip
+        APK=app/build/outputs/apk/release/PixelXpert-Next.apk
+        test -f "$ZIP" || { echo "::error::$ZIP missing"; exit 1; }
+        test -f "$APK" || { echo "::error::$APK missing"; exit 1; }
+
+        unzip -l "$ZIP"
+        for f in module.prop customize.sh service.sh sqlite3 PixelXpert-Next.apk \
+                 META-INF/com/google/android/update-binary META-INF/com/google/android/updater-script; do
+          unzip -Z1 "$ZIP" | grep -qx "$f" || { echo "::error::$f missing from zip root"; exit 1; }
+        done
+
+        WORK=$(mktemp -d)
+        unzip -q "$ZIP" -d "$WORK"
+        for k in id version versionCode; do
+          grep -q "^$k=." "$WORK/module.prop" || { echo "::error::module.prop lacks $k="; exit 1; }
+        done
+        cat "$WORK/module.prop"
+
+        for s in customize.sh service.sh module.prop META-INF/com/google/android/update-binary META-INF/com/google/android/updater-script; do
+          if grep -q $'\r' "$WORK/$s"; then echo "::error::$s has CRLF line endings"; exit 1; fi
+        done
+
+        BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+        echo "Using build-tools: $BT"
+        "$BT/apksigner" verify --print-certs "$WORK/PixelXpert-Next.apk"
+        PKG=$("$BT/aapt2" dump badging "$WORK/PixelXpert-Next.apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+        echo "APK package: $PKG"
+        [ "$PKG" = "sh.anirudhgupta109.pxn" ] || { echo "::error::unexpected package $PKG"; exit 1; }
+        "$BT/aapt2" dump badging "$WORK/PixelXpert-Next.apk" | grep -E "^(package|sdkVersion|targetSdkVersion):"
+
+        {
+          echo "## PixelXpert-Next module"
+          echo ""
+          echo "Signing: $SIGNING"
+          echo ""
+          echo '```'
+          cat "$WORK/module.prop"
+          echo '```'
+          echo ""
+          echo "| File | Size (bytes) |"
+          echo "|---|---|"
+          unzip -Zl "$ZIP" | awk '$1 ~ /^-/ {print "| " $NF " | " $4 " |"}'
+          echo ""
+          echo "APK SHA-256: \`$(sha256sum "$APK" | cut -d' ' -f1)\`"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload module zip
+      uses: actions/upload-artifact@v4
+      with:
+        name: PixelXpert-Next-module
+        path: output/PixelXpert-Next.zip
+        retention-days: 30
+        if-no-files-found: error
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: PixelXpert-Next-apk
+        path: app/build/outputs/apk/release/PixelXpert-Next.apk
+        retention-days: 30
+        if-no-files-found: error

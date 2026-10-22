@@ -36,9 +36,9 @@ grantRootUID(){
 #grant root access to given package name
 grantRootPkg(){
 	ui_print "- 	Granting root access to $1..."
-	UID=$(pm list packages -U $1 --user 0 | grep ":$1 " | awk -F 'uid:' '{ print $2 }' | cut -d ',' -f 1)
+	PKG_UID=$(pm list packages -U "$1" --user 0 | grep ":$1 " | awk -F 'uid:' '{ print $2 }' | cut -d ',' -f 1)
 
-	grantRootUID $UID $1
+	grantRootUID "$PKG_UID" "$1"
 }
 
 #grant root access to required apps
@@ -46,59 +46,57 @@ grantRootApps(){
 	grantRootPkg $PKGNAME
 }
 
-testKernelSU()
-{
-	if [[ $(ksud -V 2>&1 | grep "not found" | wc -c) -eq 0 ]]; then #KSU installed
-    	if [[ $(pm list packages | grep $PKGNAME | wc -c) -eq 0 ]]; then #PixelXpert NOT installed yet
-    		ui_print ''
-    		ui_print '*******************************'
-    		ui_print 'KernelSU binaries found!'
-    		ui_print ''
-    		ui_print '                CAUTION!:'
-    		ui_print 'Before installation, you MUST disable'
-    		ui_print '"Umount modules by default"'
-    		ui_print 'Otherwise, your device will fall into BOOTLOOP!'
-    		ui_print ''
-    		ui_print 'Do you wish to continue?'
-    		ui_print 'Volume Up: Continue'
-    		ui_print 'Volume Down: Abort'
-    		if [[ "$(getevent -l | grep -m 1 KEY_VOLUME)" == *"VOLUMEDOWN"* ]]; then
-    			abort 'Installation cancelled'
-    		fi;
-    	fi;
-    fi;
-}
-
+# Stock Pixel ROM check. Tips and the Pixel Launcher are both stock-only
+# priv-apps; either one is enough, since a later release can rename one.
 assertPixelRom()
 {
-	PixelTipsPattern="TipsPrebuilt*"
-	PixelTipsParent="/product/priv-app"
+	for PixelAppDir in /product/priv-app /system_ext/priv-app /system/priv-app; do
+		for PixelAppPattern in "TipsPrebuilt*" "NexusLauncher*"; do
+			if find "$PixelAppDir" -maxdepth 1 -name "$PixelAppPattern" -print 2>/dev/null | grep -q .; then
+				return 0
+			fi
+		done
+	done
 
-  if ! find "$PixelTipsParent" -maxdepth 1 -name "$PixelTipsPattern" -print -quit | grep -q .; then
-  	ui_print 'Device does not seem to be a Pixel'
-  	ui_print 'phone, containing an original ROM.'
+	ui_print 'Device does not seem to be a Pixel'
+	ui_print 'phone, containing an original ROM.'
 
-    abort 'Installation aborted due to incompatibility'
-  fi
+	abort 'Installation aborted due to incompatibility'
 }
 
-assert16QPR()
+# The app is built with minSdk 37, so anything older than Android 17 would
+# only fail later at pm install. Preview builds report the previous SDK level,
+# so a 17 preview is recognised by its build id (C = Android 17, Z = preview
+# drops) instead. The old Android 16 QPR pattern ([BCZ][DP][1-5]) both let
+# Android 16 through, where the APK cannot install, and capped the release
+# digit at 5.
+assertCompatibleBuild()
 {
-	if [ -z $(getprop ro.build.id | grep -e "[BCZ][DP][1-5]") ]; then
-		ui_print 'This build is not compatible with'
-    ui_print 'your ROM. Please install the stable'
-    ui_print 'version 4.3.x instead'
+	SDK_LEVEL=$(getprop ro.build.version.sdk)
+	BUILD_ID=$(getprop ro.build.id)
+	CODENAME=$(getprop ro.build.version.codename)
 
-		abort 'Installation aborted due to incompatibility'
-  fi
+	if [ -n "$SDK_LEVEL" ] && [ "$SDK_LEVEL" -ge 37 ] 2>/dev/null; then
+		return 0
+	fi
+	if [ "$CODENAME" != "REL" ] && echo "$BUILD_ID" | grep -qE '^[CZ][DP][0-9]'; then
+		return 0
+	fi
+
+	ui_print "This build needs Android 17 (API 37);"
+	ui_print "found SDK $SDK_LEVEL, build $BUILD_ID."
+	ui_print 'Please install the stable'
+	ui_print 'version 4.3.x instead'
+
+	abort 'Installation aborted due to incompatibility'
 }
 
 
 assertPixelRom
 
-assert16QPR
+assertCompatibleBuild
 
-#testKernelSU
+
 
 
 
@@ -130,11 +128,38 @@ fi
 ui_print '- Installing PixelXpert-Next app...'
 APK_PATH="$MODPATH/PixelXpert-Next.apk"
 if [ -f "$APK_PATH" ]; then
-	pm install -r -d "$APK_PATH" > /dev/null 2>&1
-	if [ $? -eq 0 ]; then
+	# system_server may not read files under /data/adb (SELinux), so install
+	# from a copy in /data/local/tmp first and fall back to the module path.
+	TMP_APK="/data/local/tmp/PixelXpert-Next.apk"
+	INSTALL_OK=0
+	INSTALL_OUT=""
+	if cp -f "$APK_PATH" "$TMP_APK" 2>/dev/null; then
+		chmod 0644 "$TMP_APK"
+		INSTALL_OUT=$(pm install -r -d "$TMP_APK" 2>&1) && INSTALL_OK=1
+		rm -f "$TMP_APK"
+	fi
+	if [ "$INSTALL_OK" != "1" ]; then
+		INSTALL_OUT=$(pm install -r -d "$APK_PATH" 2>&1) && INSTALL_OK=1
+	fi
+	# Some pm builds exit 0 on failure, so trust the output too.
+	if [ "$INSTALL_OK" = "1" ] && echo "$INSTALL_OUT" | grep -q "Success"; then
 		ui_print "- App installed successfully!"
 	else
 		ui_print "- Failed to install app! Will retry on boot."
+		ui_print "  pm said: $INSTALL_OUT"
+		# Updating over an app signed with a different key is refused. Its
+		# settings live in that app's data, so it is not uninstalled here:
+		# the user decides, and the boot retry installs this build once it
+		# is gone.
+		if echo "$INSTALL_OUT" | grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE"; then
+			ui_print ''
+			ui_print '  The installed PixelXpert-Next app is signed'
+			ui_print '  with a different key than this build.'
+			ui_print '  Export your settings from the app, then'
+			ui_print "  uninstall it (pm uninstall $PKGNAME)"
+			ui_print '  and reboot: the app is installed at boot.'
+			ui_print '  Uninstalling deletes the app settings.'
+		fi
 		touch "$MODPATH/install_needed"
 	fi
 else
