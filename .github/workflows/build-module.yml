@@ -146,7 +146,7 @@ jobs:
         test -f "$APK" || { echo "::error::$APK missing"; exit 1; }
 
         unzip -l "$ZIP"
-        for f in module.prop customize.sh service.sh sqlite3 PixelXpert-Next.apk \
+        for f in module.prop customize.sh service.sh pxn_app.sh sqlite3 PixelXpert-Next.apk \
                  META-INF/com/google/android/update-binary META-INF/com/google/android/updater-script; do
           unzip -Z1 "$ZIP" | grep -qx "$f" || { echo "::error::$f missing from zip root"; exit 1; }
         done
@@ -158,7 +158,7 @@ jobs:
         done
         cat "$WORK/module.prop"
 
-        for s in customize.sh service.sh module.prop META-INF/com/google/android/update-binary META-INF/com/google/android/updater-script; do
+        for s in customize.sh service.sh pxn_app.sh module.prop META-INF/com/google/android/update-binary META-INF/com/google/android/updater-script; do
           if grep -q $'\r' "$WORK/$s"; then echo "::error::$s has CRLF line endings"; exit 1; fi
         done
 

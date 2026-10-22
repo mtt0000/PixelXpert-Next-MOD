@@ -59,24 +59,19 @@ if pm list packages | grep -q "package:$LEGACY_PKGNAME"; then
 	pm uninstall --user 0 "$LEGACY_PKGNAME" > /dev/null 2>&1
 fi
 
-# Retry of a failed flash-time install. The flag only goes once pm reports
-# success, so a refused install (e.g. a signature mismatch the user still has
-# to resolve) is tried again on the next boot. pm output lands in install.log.
+# Retry of a failed flash-time install, and the settings restore that goes
+# with it. The flag only goes once the app from the zip is installed, so a
+# failure is tried again on the next boot. Output lands in install.log.
+pxn_say() { echo "$(date): $1" >> "$MODDIR/install.log"; }
+. "$MODDIR/pxn_app.sh"
+
 if [ -f "$MODDIR/install_needed" ]; then
-	TMP_APK="/data/local/tmp/PixelXpert-Next.apk"
-	INSTALL_OUT=""
-	if cp -f "$MODDIR/PixelXpert-Next.apk" "$TMP_APK" 2>/dev/null; then
-		chmod 0644 "$TMP_APK"
-		INSTALL_OUT=$(pm install -r -d "$TMP_APK" 2>&1)
-		rm -f "$TMP_APK"
-	fi
-	if ! echo "$INSTALL_OUT" | grep -q "Success"; then
-		INSTALL_OUT=$(pm install -r -d "$MODDIR/PixelXpert-Next.apk" 2>&1)
-	fi
-	echo "$(date): $INSTALL_OUT" >> "$MODDIR/install.log"
-	if echo "$INSTALL_OUT" | grep -q "Success"; then
+	if pxnReinstallApp "$MODDIR/PixelXpert-Next.apk" "$MODDIR/settings_backup"; then
 		rm -f "$MODDIR/install_needed"
 	fi
+elif [ -d "$MODDIR/settings_backup" ] && pxnIsInstalled; then
+	# Installed at flash time, but its data dir was not ready for the restore.
+	pxnRestoreSettings "$MODDIR/settings_backup" && rm -rf "$MODDIR/settings_backup"
 fi
 
 # Give the system a brief moment to settle

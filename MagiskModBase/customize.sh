@@ -114,6 +114,7 @@ else
 fi
 
 set_perm $MODPATH/service.sh 0 0 0755
+set_perm $MODPATH/pxn_app.sh 0 0 0644
 
 ui_print ''
 ui_print ''
@@ -127,41 +128,20 @@ fi
 
 ui_print '- Installing PixelXpert-Next app...'
 APK_PATH="$MODPATH/PixelXpert-Next.apk"
+pxn_say() { ui_print "$1"; }
+. "$MODPATH/pxn_app.sh"
 if [ -f "$APK_PATH" ]; then
-	# system_server may not read files under /data/adb (SELinux), so install
-	# from a copy in /data/local/tmp first and fall back to the module path.
-	TMP_APK="/data/local/tmp/PixelXpert-Next.apk"
-	INSTALL_OK=0
-	INSTALL_OUT=""
-	if cp -f "$APK_PATH" "$TMP_APK" 2>/dev/null; then
-		chmod 0644 "$TMP_APK"
-		INSTALL_OUT=$(pm install -r -d "$TMP_APK" 2>&1) && INSTALL_OK=1
-		rm -f "$TMP_APK"
-	fi
-	if [ "$INSTALL_OK" != "1" ]; then
-		INSTALL_OUT=$(pm install -r -d "$APK_PATH" 2>&1) && INSTALL_OK=1
-	fi
-	# Some pm builds exit 0 on failure, so trust the output too.
-	if [ "$INSTALL_OK" = "1" ] && echo "$INSTALL_OUT" | grep -q "Success"; then
-		ui_print "- App installed successfully!"
-	else
-		ui_print "- Failed to install app! Will retry on boot."
-		ui_print "  pm said: $INSTALL_OUT"
-		# Updating over an app signed with a different key is refused. Its
-		# settings live in that app's data, so it is not uninstalled here:
-		# the user decides, and the boot retry installs this build once it
-		# is gone.
-		if echo "$INSTALL_OUT" | grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE"; then
-			ui_print ''
-			ui_print '  The installed PixelXpert-Next app is signed'
-			ui_print '  with a different key than this build.'
-			ui_print '  Export your settings from the app, then'
-			ui_print "  uninstall it (pm uninstall $PKGNAME)"
-			ui_print '  and reboot: the app is installed at boot.'
-			ui_print '  Uninstalling deletes the app settings.'
-		fi
+	# Any installed copy is removed and the zip's APK installed fresh (see
+	# pxn_app.sh); settings are carried over. The backup lives in the module
+	# folder so the boot-time retry can still restore it.
+	if ! pxnReinstallApp "$APK_PATH" "$MODPATH/settings_backup"; then
+		ui_print "- Will retry on boot."
 		touch "$MODPATH/install_needed"
 	fi
+	ui_print ''
+	ui_print '- If PixelXpert-Next was enabled in LSPosed before,'
+	ui_print '  enable it again (with its scope) after reboot:'
+	ui_print '  removing the old app clears its LSPosed entry.'
 else
 	ui_print "- APK not found in zip!"
 fi
