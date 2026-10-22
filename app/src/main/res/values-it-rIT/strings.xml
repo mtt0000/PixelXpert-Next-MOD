@@ -599,4 +599,47 @@
     <string name="hide_app_toast">%1$s nascosta dai Recenti</string>
     <string name="hidden_apps_unhidden_toast">%1$s riapparirà alla prossima apertura dei Recenti</string>
     <string name="hidden_apps_all_unhidden_toast">Tutte le app riappariranno alla prossima apertura dei Recenti</string>
+
+    <!-- Edge gestures -->
+    <string name="edge_gestures_title">Gesti sui bordi</string>
+    <string name="edge_gestures_summary">Tocchi e swipe sui bordi dello schermo eseguono le azioni che scegli</string>
+    <string name="edge_gestures_enable_title">Attiva i gesti sui bordi</string>
+    <string name="edge_left_cat">Bordo sinistro</string>
+    <string name="edge_right_cat">Bordo destro</string>
+    <string name="edge_side_enabled_title">Attiva questo bordo</string>
+    <string name="edge_length_title">Lunghezza (percentuale dell\'altezza dello schermo)</string>
+    <string name="edge_position_title">Posizione verticale (0 = in alto, 100 = in basso)</string>
+    <string name="edge_gesture_tap">Tocco</string>
+    <string name="edge_gesture_double_tap">Doppio tocco</string>
+    <string name="edge_gesture_long_press">Pressione prolungata</string>
+    <string name="edge_gesture_swipe_in">Swipe verso l\'interno</string>
+    <string name="edge_gesture_swipe_up">Swipe verso l\'alto</string>
+    <string name="edge_gesture_swipe_down">Swipe verso il basso</string>
+    <string name="edge_common_cat">Opzioni comuni</string>
+    <string name="edge_thickness_title">Spessore dell\'area di tocco (dp)</string>
+    <string name="edge_swipe_threshold_title">Soglia dello swipe (dp)</string>
+    <string name="edge_haptic_title">Feedback aptico</string>
+    <string name="edge_priority_title">Priorità sul gesto di sistema</string>
+    <string name="edge_priority_summary">Gli swipe sulle aree dei bordi eseguono i gesti sui bordi al posto del gesto Indietro di sistema. Se disattivato vince il gesto Indietro e ai bordi arrivano solo tocchi e pressioni prolungate</string>
+    <string name="edge_disable_landscape_title">Disattiva in orizzontale</string>
+    <string name="edge_disable_home_title">Disattiva nella schermata Home</string>
+    <string name="edge_excluded_apps_title">Disattiva in queste app</string>
+    <string name="edge_excluded_apps_summary">Le aree dei bordi vengono rimosse mentre una di queste app è in primo piano</string>
+    <string name="edge_excluded_apps_empty">Nessuna app esclusa</string>
+    <string name="edge_excluded_apps_clear">Rimuovi tutte</string>
+    <string name="edge_excluded_apps_remove">Rimuovi</string>
+    <string name="edge_excluded_apps_add">Aggiungi un\'app</string>
+    <string name="edge_excluded_apps_add_title">Scegli l\'app da escludere</string>
+    <string name="edge_appearance_cat">Aspetto</string>
+    <string name="edge_show_handle_title">Mostra le aree dei bordi</string>
+    <string name="edge_handle_color_title">Colore delle aree dei bordi</string>
+    <string name="edge_handle_opacity_title">Opacità delle aree dei bordi</string>
+    <string name="action_back">Indietro</string>
+    <string name="action_home">Home</string>
+    <string name="action_recents">App recenti</string>
+    <string name="action_previous_app">Passa all\'app precedente</string>
+    <string name="action_quick_settings">Espandi le impostazioni rapide</string>
+    <string name="action_power_menu">Menu di spegnimento</string>
+    <string name="action_auto_rotate">Attiva/disattiva rotazione automatica</string>
+    <string name="action_volume_panel">Mostra il pannello del volume</string>
 </resources>

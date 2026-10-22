@@ -447,6 +447,16 @@ private fun visibleBy(store: PrefStore, key: String?): Boolean {
 			"BackLeftHeight" -> store.getBoolean("BackFromLeft", true)
 			"BackRightHeight" -> store.getBoolean("BackFromRight", true)
 
+			"EdgeLeftLength", "EdgeLeftPosition", "EdgeLeftTap", "EdgeLeftDoubleTap",
+			"EdgeLeftLongPress", "EdgeLeftSwipeIn", "EdgeLeftSwipeUp", "EdgeLeftSwipeDown" ->
+				store.getBoolean("EdgeLeftEnabled", true)
+
+			"EdgeRightLength", "EdgeRightPosition", "EdgeRightTap", "EdgeRightDoubleTap",
+			"EdgeRightLongPress", "EdgeRightSwipeIn", "EdgeRightSwipeUp", "EdgeRightSwipeDown" ->
+				store.getBoolean("EdgeRightEnabled", true)
+
+			"EdgeHandleColor", "EdgeHandleOpacity" -> store.getBoolean("EdgeShowHandle", false)
+
 			"leftSwipeUpPercentage" -> store.string("leftSwipeUpAction", "-1") != "-1"
 			"rightSwipeUpPercentage" -> store.string("rightSwipeUpAction", "-1") != "-1"
 

@@ -57,16 +57,58 @@ private data class AppEntry(val packageName: String, val label: String)
  */
 @Composable
 fun HiddenAppsScreen() {
+	AppListScreen(
+		prefKey = HiddenApps.PREF_KEY,
+		emptyText = R.string.hidden_apps_empty,
+		clearText = R.string.hidden_apps_show_all,
+		removeText = R.string.hidden_apps_unhide,
+		addText = R.string.hidden_apps_add,
+		addTitle = R.string.hidden_apps_add_title,
+	)
+}
+
+/**
+ * Settings > Navigation bar > Edge gestures > Disable on these apps.
+ *
+ * The same list over `EdgeExcludedApps`, which the SystemUI edge gestures
+ * hook reads to hide its strips while one of these apps is in front.
+ */
+@Composable
+fun EdgeExcludedAppsScreen() {
+	AppListScreen(
+		prefKey = "EdgeExcludedApps",
+		emptyText = R.string.edge_excluded_apps_empty,
+		clearText = R.string.edge_excluded_apps_clear,
+		removeText = R.string.edge_excluded_apps_remove,
+		addText = R.string.edge_excluded_apps_add,
+		addTitle = R.string.edge_excluded_apps_add_title,
+	)
+}
+
+/**
+ * An editable list of apps kept as one comma-separated preference (the
+ * [HiddenApps] format), so a hook can read it as plainly as this screen
+ * writes it.
+ */
+@Composable
+private fun AppListScreen(
+	prefKey: String,
+	emptyText: Int,
+	clearText: Int,
+	removeText: Int,
+	addText: Int,
+	addTitle: Int,
+) {
 	val context = LocalContext.current
 	val store: PrefStore = koinInject()
 
 	val revision by store.revision.collectAsState()
 	@Suppress("UNUSED_VARIABLE") val ignored = revision
 
-	val hidden = HiddenApps.parse(store.getString(HiddenApps.PREF_KEY, ""))
+	val hidden = HiddenApps.parse(store.getString(prefKey, ""))
 	var showAdd by remember { mutableStateOf(false) }
 
-	fun save(list: List<String>) = store.putString(HiddenApps.PREF_KEY, HiddenApps.join(list))
+	fun save(list: List<String>) = store.putString(prefKey, HiddenApps.join(list))
 
 	val entries = hidden.map { AppEntry(it, labelOf(context, it)) }.sortedBy { it.label.lowercase() }
 
@@ -78,7 +120,7 @@ fun HiddenAppsScreen() {
 				horizontalAlignment = Alignment.CenterHorizontally,
 			) {
 				Text(
-					text = stringResource(R.string.hidden_apps_empty),
+					text = stringResource(emptyText),
 					style = MaterialTheme.typography.bodyLarge,
 					color = MaterialTheme.colorScheme.onSurfaceVariant,
 				)
@@ -94,7 +136,7 @@ fun HiddenAppsScreen() {
 						horizontalArrangement = Arrangement.End,
 					) {
 						TextButton(onClick = { save(emptyList()) }) {
-							Text(stringResource(R.string.hidden_apps_show_all))
+							Text(stringResource(clearText))
 						}
 					}
 				}
@@ -105,7 +147,7 @@ fun HiddenAppsScreen() {
 						supportingContent = { Text(entry.packageName) },
 						trailingContent = {
 							TextButton(onClick = { save(hidden.filter { it != entry.packageName }) }) {
-								Text(stringResource(R.string.hidden_apps_unhide))
+								Text(stringResource(removeText))
 							}
 						},
 					)
@@ -116,13 +158,14 @@ fun HiddenAppsScreen() {
 		ExtendedFloatingActionButton(
 			onClick = { showAdd = true },
 			icon = { Icon(Icons.Default.Add, contentDescription = null) },
-			text = { Text(stringResource(R.string.hidden_apps_add)) },
+			text = { Text(stringResource(addText)) },
 			modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
 		)
 	}
 
 	if (showAdd) {
 		AddAppDialog(
+			title = addTitle,
 			alreadyHidden = hidden,
 			onPick = { pkg ->
 				save(hidden + pkg)
@@ -135,6 +178,7 @@ fun HiddenAppsScreen() {
 
 @Composable
 private fun AddAppDialog(
+	title: Int,
 	alreadyHidden: List<String>,
 	onPick: (String) -> Unit,
 	onDismiss: () -> Unit,
@@ -156,7 +200,7 @@ private fun AddAppDialog(
 
 	AlertDialog(
 		onDismissRequest = onDismiss,
-		title = { Text(stringResource(R.string.hidden_apps_add_title)) },
+		title = { Text(stringResource(title)) },
 		text = {
 			val list = apps
 			if (list == null) {

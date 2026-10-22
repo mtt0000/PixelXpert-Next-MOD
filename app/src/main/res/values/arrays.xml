@@ -88,6 +88,54 @@
 		<item>8</item>
 	</string-array>
 
+	<!-- Edge gestures: the codes are SystemUIActions' constants; the ones also in
+	     custom_action_codes keep that list's numbers. -->
+	<string-array name="edge_action_titles">
+		<item>@string/none</item>
+		<item>@string/action_back</item>
+		<item>@string/action_home</item>
+		<item>@string/action_recents</item>
+		<item>@string/action_previous_app</item>
+		<item>@string/toggle_notification</item>
+		<item>@string/action_quick_settings</item>
+		<item>@string/screenshot</item>
+		<item>@string/action_power_menu</item>
+		<item>@string/sleep</item>
+		<item>@string/kill_foreground_app</item>
+		<item>@string/torch</item>
+		<item>@string/action_auto_rotate</item>
+		<item>@string/assistant</item>
+		<item>@string/camera</item>
+		<item>@string/pause_media</item>
+		<item>@string/skip_media_next</item>
+		<item>@string/skip_media_prev</item>
+		<item>@string/action_volume_panel</item>
+		<item>@string/app_switch_tile_title</item>
+	</string-array>
+
+	<string-array name="edge_action_codes">
+		<item>-1</item>
+		<item>2</item>
+		<item>10</item>
+		<item>11</item>
+		<item>12</item>
+		<item>4</item>
+		<item>13</item>
+		<item>1</item>
+		<item>14</item>
+		<item>7</item>
+		<item>3</item>
+		<item>15</item>
+		<item>16</item>
+		<item>17</item>
+		<item>22</item>
+		<item>18</item>
+		<item>19</item>
+		<item>20</item>
+		<item>21</item>
+		<item>8</item>
+	</string-array>
+
     <string-array name="sbc_position_names">
 		<item>@string/clock_default</item>
 		<item>@string/clock_center</item>

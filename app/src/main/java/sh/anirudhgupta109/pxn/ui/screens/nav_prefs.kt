@@ -11,6 +11,7 @@ val nav_prefs: PrefScreen = PrefScreen(
 			NavRow(key = "gesturenav_header", title = R.string.gesturenav_header, route = "gesture_nav"),
 			NavRow(key = "threebutton_header", title = R.string.threebutton_header_title, route = "three_button_nav"),
 			NavRow(key = "taskbar_header", title = R.string.taskbar_header_title, route = "taskbar_nav"),
+			NavRow(key = "edge_gestures_header", title = R.string.edge_gestures_title, summary = R.string.edge_gestures_summary, route = "edge_gestures"),
 			SwitchPref(key = "HideNavbar", title = R.string.hide_navbar_title, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 	),
 )
