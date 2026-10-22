@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.media.AudioManager
 import android.os.Handler
@@ -20,6 +21,7 @@ import android.view.Display
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import android.view.WindowManager
 import de.robv.android.xposed.XposedHelpers.callMethod
 import de.robv.android.xposed.XposedHelpers.callStaticMethod
@@ -219,6 +221,7 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 		// strips can wait until it is settled.
 		mainHandler.postDelayed({
 			started = true
+			log("EdgeGestures: starting, enabled=$enabled, edges=${sideEnabled.joinToString()}")
 			registerTaskListener()
 			refreshForeground()
 			applyState()
@@ -262,8 +265,10 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 	private fun addEdge(side: Int): EdgeGestureView {
 		val view = EdgeGestureView(windowContext(), side, this)
 		configure(view)
-		windowManager!!.addView(view, stripParams(side))
+		val params = stripParams(side)
+		windowManager!!.addView(view, params)
 		views[side] = view
+		log("EdgeGestures: ${SIDE_PREFIXES[side]} added at ${params.x},${params.y} size ${params.width}x${params.height}")
 		return view
 	}
 
@@ -410,18 +415,33 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 			}
 		}
 		params.title = "PixelXpertEdgeEffect" + SIDE_PREFIXES[side]
+		// Touches pass through a touch-less window anyway, but Android blocks
+		// them on the app below when the window is opaque and not trusted;
+		// at 80% it never does, should the trusted flag be refused.
+		params.alpha = 0.8f
 
 		if (view.parent == null) windowManager!!.addView(view, params)
 		else windowManager!!.updateViewLayout(view, params)
 	}
 
+	private val lastHiddenReason = arrayOfNulls<String>(SIDES)
+
 	private fun updateVisibility() {
 		val hidden = isHiddenNow()
 		for (side in 0 until SIDES) {
 			val view = views[side] ?: continue
-			val sideHidden = hidden || !orientationAllows(side) || isCoveredByKeyboard(side)
-			view.visibility = if (sideHidden) View.GONE else View.VISIBLE
+			val reason = when {
+				hidden -> "disabled or excluded app ($foregroundPackage)"
+				!orientationAllows(side) -> "orientation"
+				isCoveredByKeyboard(side) -> "keyboard"
+				else -> null
+			}
+			view.visibility = if (reason != null) View.GONE else View.VISIBLE
 			effects[side]?.visibility = view.visibility
+			if (reason != lastHiddenReason[side]) {
+				lastHiddenReason[side] = reason
+				log("EdgeGestures: ${SIDE_PREFIXES[side]} " + (reason?.let { "hidden: $it" } ?: "shown"))
+			}
 		}
 	}
 
@@ -438,10 +458,11 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 		if (!keyboardApplies()) return false
 		return when (keyboardBehavior) {
 			KEYBOARD_HIDE -> true
-			// Unknown position: the strip cannot be cut to fit, so it steps aside.
-			KEYBOARD_UNDERNEATH, KEYBOARD_SHIFT -> imeTop <= 0 ||
+			// Unknown position: the strips stay rather than vanish.
+			KEYBOARD_UNDERNEATH, KEYBOARD_SHIFT -> imeTop > 0 && (
 				(side == SIDE_BOTTOM && keyboardBehavior == KEYBOARD_UNDERNEATH) ||
-				stripBounds(side)[3] < thicknessDp * windowContext().resources.displayMetrics.density
+					stripBounds(side)[3] < thicknessDp * windowContext().resources.displayMetrics.density
+				)
 			else -> false
 		}
 	}
@@ -485,43 +506,76 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 	}
 
 	/**
-	 * `DisplayImeController` tells its position processors where the IME is
-	 * going (`dispatchStartPositioning(displayId, hiddenTop, shownTop, show,
-	 * isFloating, t)`) and whether it ended up shown; `CommandQueue`'s IME
-	 * status is the fallback that only knows shown or hidden. Arguments are
-	 * picked by type, because their order has shifted between releases.
+	 * Where the keyboard is, taken - as Edge Gestures takes it from the
+	 * accessibility window list - from the IME window's own frame: the WM
+	 * shell's `DisplayInsetsController` receives the display's `InsetsState`
+	 * from the window manager on every change, and its IME source carries the
+	 * keyboard's frame and whether it is shown. Every class on that path is
+	 * hooked tolerantly; the first state that arrives makes it the only
+	 * source.
+	 *
+	 * `DisplayImeController.dispatchStartPositioning(displayId, hiddenTop,
+	 * shownTop, show, isFloating, t)` is the fallback for builds where no
+	 * insets state is seen. Arguments are picked by type, because their order
+	 * has shifted between releases. A keyboard reported without a position
+	 * never hides the strips: they stay over it rather than vanish.
 	 */
 	private fun hookKeyboard() {
-		val imeController = ReflectedClass.ofIfPossible("com.android.wm.shell.common.DisplayImeController")
+		val onInsets = ReflectedClass.ReflectionConsumer { param ->
+			try {
+				val state = param.args.firstOrNull { it != null && it.javaClass.name == "android.view.InsetsState" } ?: return@ReflectionConsumer
+				val displayId = try {
+					getIntField(param.thisObject, "mDisplayId")
+				} catch (ignored: Throwable) {
+					Display.DEFAULT_DISPLAY
+				}
+				if (displayId == Display.DEFAULT_DISPLAY) onInsetsState(state)
+			} catch (t: Throwable) {
+				log(t)
+			}
+		}
 
-		imeController
+		for (name in listOf(
+			"com.android.wm.shell.common.DisplayInsetsController\$PerDisplay",
+			"com.android.wm.shell.common.DisplayImeController\$PerDisplay",
+		)) {
+			ReflectedClass.ofIfPossible(name).before("insetsChanged").run(onInsets)
+		}
+
+		ReflectedClass.ofIfPossible("com.android.wm.shell.common.DisplayImeController")
 			.before("dispatchStartPositioning")
 			.run { param ->
-				val ints = param.args.filterIsInstance<Int>()
-				val booleans = param.args.filterIsInstance<Boolean>()
-				if (ints.size < 3 || ints[0] != Display.DEFAULT_DISPLAY || booleans.isEmpty()) return@run
-				onImeChanged(booleans[0], if (booleans[0]) ints[2] else -1, booleans.getOrElse(1) { false })
+				if (insetsSeen) return@run
+				try {
+					val ints = param.args.filterIsInstance<Int>()
+					val booleans = param.args.filterIsInstance<Boolean>()
+					if (ints.size < 3 || ints[0] != Display.DEFAULT_DISPLAY || booleans.isEmpty()) return@run
+					onImeChanged(booleans[0], if (booleans[0]) ints[2] else -1, booleans.getOrElse(1) { false })
+				} catch (t: Throwable) {
+					log(t)
+				}
 			}
+	}
 
-		imeController
-			.before("dispatchVisibilityChanged")
-			.run { param ->
-				val ints = param.args.filterIsInstance<Int>()
-				val booleans = param.args.filterIsInstance<Boolean>()
-				if (ints.isEmpty() || ints[0] != Display.DEFAULT_DISPLAY || booleans.isEmpty()) return@run
-				if (!booleans[0]) onImeChanged(false, -1, false)
-				else if (!imeVisible) onImeChanged(true, imeTop, imeFloating)
-			}
+	@Volatile
+	private var insetsSeen = false
 
-		ReflectedClass.ofIfPossible("com.android.systemui.statusbar.CommandQueue")
-			.before("setImeWindowStatus")
-			.run { param ->
-				val ints = param.args.filterIsInstance<Int>()
-				if (ints.size < 2 || ints[0] != Display.DEFAULT_DISPLAY) return@run
-				// InputMethodService.IME_VISIBLE
-				val visible = (ints[1] and 2) != 0
-				if (visible != imeVisible) onImeChanged(visible, if (visible) imeTop else -1, imeFloating)
+	/** Reads the IME source out of an `InsetsState`, whatever its exact shape. */
+	private fun onInsetsState(state: Any) {
+		val count = callMethod(state, "sourceSize") as Int
+		var visible = false
+		var top = -1
+		for (i in 0 until count) {
+			val source = callMethod(state, "sourceAt", i)
+			if (callMethod(source, "getType") as Int != WindowInsets.Type.ime()) continue
+			val frame = callMethod(source, "getFrame") as Rect
+			if (callMethod(source, "isVisible") as Boolean && frame.height() > 0) {
+				visible = true
+				top = frame.top
 			}
+		}
+		insetsSeen = true
+		onImeChanged(visible, top, false)
 	}
 
 	private fun onImeChanged(visible: Boolean, top: Int, floating: Boolean) {
@@ -530,6 +584,7 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 			imeVisible = visible
 			imeTop = top
 			imeFloating = floating
+			log("EdgeGestures: keyboard " + (if (visible) "shown, top $top" else "hidden"))
 			if (started) applyState()
 		}
 	}
