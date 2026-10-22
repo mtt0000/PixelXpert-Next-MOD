@@ -101,9 +101,11 @@
 		     suppresses the lint warning to say so). -->
 		<receiver
 			android:name=".receivers.BootReceiver"
+			android:directBootAware="true"
 			android:enabled="true"
 			android:exported="true">
 			<intent-filter>
+				<action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
 				<action android:name="android.intent.action.BOOT_COMPLETED" />
 			</intent-filter>
 		</receiver>

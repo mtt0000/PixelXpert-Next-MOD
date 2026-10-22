@@ -73,9 +73,3 @@ elif [ -d "$MODDIR/settings_backup" ] && pxnIsInstalled; then
 	# Installed at flash time, but its data dir was not ready for the restore.
 	pxnRestoreSettings "$MODDIR/settings_backup" && rm -rf "$MODDIR/settings_backup"
 fi
-
-# Give the system a brief moment to settle
-sleep 2
-
-# Restart SystemUI so the LSPosed hook can properly initiate with decrypted preferences
-killall com.android.systemui
