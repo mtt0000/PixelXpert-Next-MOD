@@ -19,6 +19,8 @@ val misc_prefs: PrefScreen = PrefScreen(
 				SwitchPref(key = "disableScreenshotSound", title = R.string.screenshot_sound_disable_title, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				SwitchPref(key = "EnableClipboardSmartActions", title = R.string.clipboard_smart_actions_title, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				SwitchPref(key = "ScreenshotChordInsecure", title = R.string.screenshot_insecure, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
+				SwitchPref(key = "ScreenshotDeleteShared", title = R.string.screenshot_delete_shared_title, summary = R.string.screenshot_delete_shared_summary, default = "false"),
+				SliderPref(key = "ScreenshotDeleteSharedDelay", title = R.string.screenshot_delete_shared_delay_title, summary = R.string.screenshot_delete_shared_delay_summary, default = "60", min = 10f, max = 600f, step = 10f, valueCount = 1, dependency = "ScreenshotDeleteShared"),
 				SwitchPref(key = "InsecureScreenRecord", title = R.string.screen_record_insecure, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				SwitchPref(key = "allScreenRotations", title = R.string.allow_all_screen_rotations, summary = R.string.allow_all_screen_rotations_summary, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				SwitchPref(key = "noCutoutEnabled", title = R.string.force_no_cutout, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),

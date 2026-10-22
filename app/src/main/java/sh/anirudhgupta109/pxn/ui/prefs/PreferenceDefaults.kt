@@ -95,6 +95,8 @@ val preferenceDefaults: Map<String, String?> = mapOf(
 	"SBClockLoc" to "0",
 	"SBIgnoredIcons" to null,
 	"ScreenshotChordInsecure" to "false",
+	"ScreenshotDeleteShared" to "false",
+	"ScreenshotDeleteSharedDelay" to "60",
 	"SegmentorAI" to "0",
 	"ShowChargingInfo" to "false",
 	"SleepOnFlatRespectWakeLock" to "true",

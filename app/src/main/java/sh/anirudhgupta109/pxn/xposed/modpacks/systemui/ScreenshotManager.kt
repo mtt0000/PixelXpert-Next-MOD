@@ -1,7 +1,14 @@
 package sh.anirudhgupta109.pxn.xposed.modpacks.systemui
 
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.MediaPlayer
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.os.UserManager
 import de.robv.android.xposed.XposedHelpers.getObjectField
 import de.robv.android.xposed.XposedHelpers.setObjectField
@@ -29,6 +36,13 @@ import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
  * executor path - while "screenshot chord insecure" lets the chord capture
  * secure content by forcing the `CaptureArgs` secure flags and short-circuiting
  * the managed-profile / user-info policy checks that would otherwise refuse.
+ *
+ * "delete shared screenshots" (Samsung One UI has the same option) removes a
+ * screenshot from the gallery once it was shared from the screenshot shelf.
+ * The share chooser built by `ActionIntentCreator` gets an IntentSender that
+ * fires only when a target is actually picked - cancelling the sheet keeps the
+ * file - and the MediaStore entry is deleted after a grace period, because the
+ * receiving app reads the URI after the chooser has closed.
  */
 @SystemUIModPack
 @ChildProcessModPack(processNameContains = "screenshot")
@@ -36,13 +50,24 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 
 	companion object {
 		private var disableScreenshotSound = false
+
+		private const val ACTION_SCREENSHOT_SHARED = "sh.anirudhgupta109.pxn.SCREENSHOT_SHARED"
+		private const val EXTRA_SHARED_URI = "pxn_shared_uri"
 	}
 
 	private var ScreenshotChordInsecure = false
+	private var ScreenshotDeleteShared = false
+	private var ScreenshotDeleteSharedDelay = 60
+
+	private var sharedReceiverRegistered = false
+	private var sharedRequestCode = 0
+	private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 
 	override fun onPreferenceUpdated(vararg key: String?) {
 		disableScreenshotSound = Xprefs.getBoolean("disableScreenshotSound", false)
 		ScreenshotChordInsecure = Xprefs.getBoolean("ScreenshotChordInsecure", false)
+		ScreenshotDeleteShared = Xprefs.getBoolean("ScreenshotDeleteShared", false)
+		ScreenshotDeleteSharedDelay = Xprefs.getSliderInt("ScreenshotDeleteSharedDelay", 60)
 	}
 
 	override fun onPackageLoaded(PRParam: XposedModuleInterface.PackageReadyParam) {
@@ -82,6 +107,23 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 				}
 			}
 
+		// createShare / createShareWithSubject / createShareWithText all end in the
+		// private createShare (and its static $default bridge), so one share runs
+		// several of these hooks on the same chooser intent - see the extra check.
+		ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ActionIntentCreator")
+			.after(Pattern.compile("createShare.*"))
+			.run { param ->
+				if (!ScreenshotDeleteShared) return@run
+				val chooser = param.getResult<Any?>() as? Intent ?: return@run
+				if (chooser.hasExtra(Intent.EXTRA_CHOSEN_COMPONENT_INTENT_SENDER)) return@run
+				val uri = param.args.firstOrNull { it is Uri } as? Uri ?: return@run
+				try {
+					chooser.putExtra(Intent.EXTRA_CHOSEN_COMPONENT_INTENT_SENDER, sharedScreenshotSender(uri).intentSender)
+				} catch (t: Throwable) {
+					log(t)
+				}
+			}
+
 		//17 - much easier approach: killing mediaplayer totally
 		ReflectedClass.of(MediaPlayer::class.java)
 			.before("start")
@@ -116,6 +158,42 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 					}
 				}
 			}
+	}
+
+	/** IntentSender the chooser fires once a share target is picked for [uri]. */
+	private fun sharedScreenshotSender(uri: Uri): PendingIntent {
+		if (!sharedReceiverRegistered) {
+			mContext.registerReceiver(object : BroadcastReceiver() {
+				override fun onReceive(context: Context, intent: Intent) {
+					val shared = intent.getParcelableExtra(EXTRA_SHARED_URI, Uri::class.java) ?: return
+					val delay = ScreenshotDeleteSharedDelay.coerceAtLeast(0) * 1000L
+					mainHandler.postDelayed({ deleteSharedScreenshot(shared) }, delay)
+				}
+			}, IntentFilter(ACTION_SCREENSHOT_SHARED), Context.RECEIVER_NOT_EXPORTED)
+			sharedReceiverRegistered = true
+		}
+		// Mutable so the chooser can fill in the picked component; the package
+		// keeps it explicit, as mutable PendingIntents have to be.
+		val intent = Intent(ACTION_SCREENSHOT_SHARED)
+			.setPackage(mContext.packageName)
+			.putExtra(EXTRA_SHARED_URI, uri)
+		return PendingIntent.getBroadcast(
+			mContext,
+			sharedRequestCode++,
+			intent,
+			PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_UPDATE_CURRENT,
+		)
+	}
+
+	/** SystemUI inserted the MediaStore row itself, so it may delete it without a consent dialog. */
+	private fun deleteSharedScreenshot(uri: Uri) {
+		Thread {
+			try {
+				mContext.contentResolver.delete(uri, null, null)
+			} catch (t: Throwable) {
+				log(t)
+			}
+		}.start()
 	}
 
 	//Seems like an executor, but doesn't act! perfect thing
