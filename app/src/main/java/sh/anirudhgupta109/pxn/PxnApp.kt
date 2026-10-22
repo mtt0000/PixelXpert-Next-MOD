@@ -19,6 +19,7 @@ import org.koin.core.context.startKoin
 import sh.anirudhgupta109.pxn.data.PrefStore
 import sh.anirudhgupta109.pxn.di.pxnModule
 import sh.anirudhgupta109.pxn.service.RootProvider
+import sh.anirudhgupta109.pxn.ui.prefs.syncClipboardShareComponent
 
 /**
  * Application entry point for the standalone Compose rewrite.
@@ -59,6 +60,7 @@ class PxnApp : android.app.Application() {
 		// by the directBootAware provider, in which case markReady defers the
 		// write to ACTION_USER_UNLOCKED instead of throwing out of onCreate.
 		PrefStore.markReady(this)
+		syncClipboardShareComponent(this)
 
 		createNotificationChannel()
 		bindXposedService()

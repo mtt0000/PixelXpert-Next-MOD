@@ -33,9 +33,9 @@ grantRootUID(){
 #grant root access to given package name 
 grantRootPkg(){ 
 	echo "- 	Granting root access to $1..." 
-	UID=$(pm list packages -U $1 --user 0 | grep ":$1 " | awk -F 'uid:' '{ print $2 }' | cut -d ',' -f 1)
- 
-	grantRootUID $UID $1 
+	PKG_UID=$(pm list packages -U "$1" --user 0 | grep ":$1 " | awk -F 'uid:' '{ print $2 }' | cut -d ',' -f 1)
+
+	grantRootUID "$PKG_UID" "$1"
 } 
  
 #grant root access to required apps 
@@ -59,9 +59,19 @@ if pm list packages | grep -q "package:$LEGACY_PKGNAME"; then
 	pm uninstall --user 0 "$LEGACY_PKGNAME" > /dev/null 2>&1
 fi
 
+# Retry of a failed flash-time install, and the settings restore that goes
+# with it. The flag only goes once the app from the zip is installed, so a
+# failure is tried again on the next boot. Output lands in install.log.
+pxn_say() { echo "$(date): $1" >> "$MODDIR/install.log"; }
+. "$MODDIR/pxn_app.sh"
+
 if [ -f "$MODDIR/install_needed" ]; then
-	pm install -r -d "$MODDIR/PixelXpert-Next.apk" > /dev/null 2>&1
-	rm -f "$MODDIR/install_needed"
+	if pxnReinstallApp "$MODDIR/PixelXpert-Next.apk" "$MODDIR/settings_backup"; then
+		rm -f "$MODDIR/install_needed"
+	fi
+elif [ -d "$MODDIR/settings_backup" ] && pxnIsInstalled; then
+	# Installed at flash time, but its data dir was not ready for the restore.
+	pxnRestoreSettings "$MODDIR/settings_backup" && rm -rf "$MODDIR/settings_backup"
 fi
 
 # Give the system a brief moment to settle

@@ -44,6 +44,7 @@ val header_preferences: PrefScreen = PrefScreen(
 	children = listOf(
 				MainTile(key = "pm_header", title = R.string.pm_header, summary = R.string.pm_header_summary, route = "package_manager", icon = R.drawable.ic_settings_package_manager, ignore = true),
 				MainTile(key = "misc_header", title = R.string.misc_header, summary = R.string.misc_header_summary, route = "misc", icon = R.drawable.ic_settings_misc, ignore = true),
+				MainTile(key = "custom_header", title = R.string.custom_header, summary = R.string.custom_header_summary, route = "custom", icon = R.drawable.ic_settings_custom, ignore = true),
 	),
 			),
 	),

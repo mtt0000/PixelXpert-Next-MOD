@@ -9,6 +9,7 @@ package sh.anirudhgupta109.pxn.ui.screens
 import sh.anirudhgupta109.pxn.R
 
 val routeToScreenKey: Map<String, String> = mapOf(
+	"custom" to "custom_prefs",
 	"dialer" to "dialer_prefs",
 	"gesture_nav" to "gesture_nav_prefs",
 	"hot_spot" to "hotspot_prefs",
@@ -33,6 +34,7 @@ val unportedRoutes: Set<String> = setOf(
 )
 
 val searchScreenTitles: Map<String, Int> = mapOf(
+	"custom_prefs" to R.string.custom_header,
 	"dialer_prefs" to R.string.dialer_header,
 	"gesture_nav_prefs" to R.string.gesturenav_header,
 	"hotspot_prefs" to R.string.hotspot_header,

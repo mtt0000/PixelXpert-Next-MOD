@@ -632,4 +632,38 @@
     <string name="hook_audit_copied">Report copied to clipboard</string>
     <string name="hook_audit_waiting">Waiting for hooked processes to reply…</string>
     <string name="hook_audit_waiting_desc">Ensure the module is enabled in LSPosed, target apps are selected in scope, and they have been restarted. Tap Refresh to request audit. A SystemUI restart might be needed!</string>
+
+    <!--Custom Settings (added by the hide/kill/clipboard feature set)-->
+    <string name="custom_header">Custom Settings</string>
+    <string name="custom_header_summary">Clipboard share target, Recents buttons and hidden apps</string>
+    <string name="custom_share_category">Share sheet</string>
+    <string name="custom_recents_category">Recents</string>
+    <string name="clipboard_share_title">Copy to clipboard from the share sheet</string>
+    <string name="clipboard_share_summary">Adds a \"Copy content in clipboard\" target to the Android share sheet</string>
+    <string name="clipboard_share_label">Copy content in clipboard</string>
+    <string name="clipboard_share_done">Copied to clipboard</string>
+    <string name="clipboard_share_nothing">No content found to copy</string>
+    <string name="clipboard_share_failed">Failed to get clipboard service</string>
+    <string name="clear_all_legacy_style_title">Round \"Clear all\" button</string>
+    <string name="clear_all_legacy_style_summary">Round black button instead of the plain icon. Needs the clear-all button from Miscellaneous &gt; Launcher options. Restarts the launcher.</string>
+    <string name="clear_all_in_action_bar_title">Clear-all button in the action bar</string>
+    <string name="clear_all_in_action_bar_summary">Puts the clear-all button in the bottom bar, left of Screenshot and Select, instead of beside the cards. Restarts the launcher.</string>
+    <string name="hidden_apps_in_action_bar_title">Hidden-apps button in the action bar</string>
+    <string name="hidden_apps_in_action_bar_summary">Puts the hidden-apps button in the bottom bar, left of Screenshot and Select, instead of on the right above the clear-all button. Restarts the launcher.</string>
+    <string name="kill_app_title">Kill app button</string>
+    <string name="kill_app_summary">Adds a button on every Recents card that force-stops the app and removes the card</string>
+    <string name="hide_app_title">Hide app button</string>
+    <string name="hide_app_summary">Adds a button on every Recents card that hides the app from Recents</string>
+    <string name="hidden_apps_title">Hidden apps</string>
+    <string name="hidden_apps_summary">Apps hidden from Recents. Show them again or hide more</string>
+    <string name="hidden_apps_empty">No hidden apps</string>
+    <string name="hidden_apps_dialog_title">Hidden apps - tap one to show it again</string>
+    <string name="hidden_apps_show_all">Show all</string>
+    <string name="hidden_apps_unhide">Show</string>
+    <string name="hidden_apps_add">Hide an app</string>
+    <string name="hidden_apps_add_title">Choose the app to hide</string>
+    <string name="kill_app_toast">Stopped: %1$s</string>
+    <string name="hide_app_toast">%1$s hidden from Recents</string>
+    <string name="hidden_apps_unhidden_toast">%1$s will reappear the next time Recents opens</string>
+    <string name="hidden_apps_all_unhidden_toast">All apps will reappear the next time Recents opens</string>
 </resources>

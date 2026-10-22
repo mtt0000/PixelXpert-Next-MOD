@@ -1,0 +1,248 @@
+name: Build KernelSU module
+
+# The only build workflow of this fork. On every commit to any branch (and on
+# manual runs) it builds the release APK and the flashable
+# PixelXpert-Next.zip (Magisk module format: KernelSU / KernelSU Next /
+# Magisk / APatch), then replaces that branch's GitHub release with a single
+# one for the latest commit carrying the zip. Flashing the zip also installs
+# the APK (MagiskModBase/customize.sh).
+#
+# Needs no secrets: without SIGNING_KEY the APK is signed with a CI key that
+# is cached between runs, so consecutive builds can update each other.
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+# A newer commit on the same branch cancels the older build, so the release
+# always ends up matching the branch head.
+concurrency:
+  group: build-module-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    env:
+      HAS_SIGNING_KEY: ${{ secrets.SIGNING_KEY != '' }}
+
+    steps:
+    - name: Source Code Download
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: JDK 21 Setup
+      uses: actions/setup-java@v5.2.0
+      with:
+        java-version: '21'
+        # temurin resolves through the Adoptium API; the jetbrains distribution
+        # queries the GitHub API anonymously and fails on its rate limit.
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Android SDK packages
+      run: |
+        SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+        yes | "$SDKM" --licenses > /dev/null || true
+        # compileSdk/targetSdk are 37. The package id has been both
+        # "android-NN" and "android-NN.0", and may only exist on a preview
+        # channel; try each, AGP downloads whatever is still missing.
+        installed=""
+        for channel in 0 1 3; do
+          for pkg in "platforms;android-37" "platforms;android-37.0"; do
+            if "$SDKM" --channel=$channel --install "$pkg" > /dev/null 2>&1; then
+              installed="$pkg (channel $channel)"
+              break 2
+            fi
+          done
+        done
+        echo "Installed platform: ${installed:-none, left to AGP}"
+        "$SDKM" --list_installed 2>/dev/null | grep -E "platforms;|build-tools;" || true
+
+    # Without a release key the build is signed with a CI key generated once
+    # and kept in the Actions cache, so consecutive zips carry the same
+    # signature and a new one updates the app installed by an older one.
+    - name: Restore CI signing key
+      if: env.HAS_SIGNING_KEY != 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.pxn-ci/ci-release.jks
+        key: pxn-ci-signing-key-v1
+
+    - name: Signing setup
+      env:
+        SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+        ALIAS: ${{ secrets.ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: |
+        if [ -n "$SIGNING_KEY" ]; then
+          echo "$SIGNING_KEY" | base64 --decode > "$GITHUB_WORKSPACE/ReleaseKey.jks"
+          {
+            echo "storePassword=$KEY_STORE_PASSWORD"
+            echo "keyAlias=$ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "storeFile=$GITHUB_WORKSPACE/ReleaseKey.jks"
+          } > ReleaseKey.properties
+          echo "SIGNING=release key (SIGNING_KEY secret)" >> "$GITHUB_ENV"
+        else
+          KS="$HOME/.pxn-ci/ci-release.jks"
+          if [ ! -f "$KS" ]; then
+            mkdir -p "$(dirname "$KS")"
+            keytool -genkeypair -keystore "$KS" -storetype PKCS12 \
+              -alias pxn-ci -keyalg RSA -keysize 4096 -validity 36500 \
+              -storepass pxn-ci-key -keypass pxn-ci-key \
+              -dname "CN=PixelXpert-Next MOD CI"
+            echo "Generated a new CI signing key"
+          fi
+          {
+            echo "storePassword=pxn-ci-key"
+            echo "keyAlias=pxn-ci"
+            echo "keyPassword=pxn-ci-key"
+            echo "storeFile=$KS"
+          } > ReleaseKey.properties
+          echo "SIGNING=CI key from the Actions cache (no SIGNING_KEY secret)" >> "$GITHUB_ENV"
+        fi
+
+    # versionCode = the committed one + this workflow's run number, so every
+    # build is newer than the last and the root manager shows it as an update.
+    - name: Version from run number
+      run: |
+        BASE=$(sed -n 's/^VERSION_CODE=//p' version.properties)
+        CODE=$((BASE + GITHUB_RUN_NUMBER))
+        sed -i "s/^VERSION_CODE=.*/VERSION_CODE=$CODE/" version.properties
+        echo "Base versionCode $BASE, this build $((CODE + 1))"
+
+    - name: Gradle Build
+      run: |
+        chmod +x gradlew
+        # incrementCanaryVersion writes the version into module.prop; createZip
+        # only mustRunAfter assembleRelease, so both are named explicitly.
+        ./gradlew --no-configuration-cache incrementCanaryVersion assembleRelease createZip -Pchannel=canary
+
+    - name: Check generated mod-pack registry
+      run: |
+        REG=$(find app/build/generated/ksp/release -name 'ModPacks.kt' | head -n 1)
+        test -n "$REG" || { echo "::error::ModPacks.kt not generated"; exit 1; }
+        grep -n "launcher\." "$REG"
+        for pack in KillAppMod HideAppMod ClearAllButtonMod; do
+          grep -q "$pack" "$REG" || { echo "::error::$pack missing from $REG"; exit 1; }
+        done
+
+    - name: Validate module zip
+      run: |
+        set -e
+        ZIP=output/PixelXpert-Next.zip
+        APK=app/build/outputs/apk/release/PixelXpert-Next.apk
+        test -f "$ZIP" || { echo "::error::$ZIP missing"; exit 1; }
+        test -f "$APK" || { echo "::error::$APK missing"; exit 1; }
+
+        unzip -l "$ZIP"
+        for f in module.prop customize.sh service.sh pxn_app.sh sqlite3 PixelXpert-Next.apk \
+                 META-INF/com/google/android/update-binary META-INF/com/google/android/updater-script; do
+          unzip -Z1 "$ZIP" | grep -qx "$f" || { echo "::error::$f missing from zip root"; exit 1; }
+        done
+
+        WORK=$(mktemp -d)
+        unzip -q "$ZIP" -d "$WORK"
+        for k in id version versionCode; do
+          grep -q "^$k=." "$WORK/module.prop" || { echo "::error::module.prop lacks $k="; exit 1; }
+        done
+        cat "$WORK/module.prop"
+
+        for s in customize.sh service.sh pxn_app.sh module.prop META-INF/com/google/android/update-binary META-INF/com/google/android/updater-script; do
+          if grep -q $'\r' "$WORK/$s"; then echo "::error::$s has CRLF line endings"; exit 1; fi
+        done
+
+        BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+        echo "Using build-tools: $BT"
+        "$BT/apksigner" verify --print-certs "$WORK/PixelXpert-Next.apk"
+        PKG=$("$BT/aapt2" dump badging "$WORK/PixelXpert-Next.apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+        echo "APK package: $PKG"
+        [ "$PKG" = "sh.anirudhgupta109.pxn" ] || { echo "::error::unexpected package $PKG"; exit 1; }
+        "$BT/aapt2" dump badging "$WORK/PixelXpert-Next.apk" | grep -E "^(package|sdkVersion|targetSdkVersion):"
+
+        {
+          echo "## PixelXpert-Next module"
+          echo ""
+          echo "Signing: $SIGNING"
+          echo ""
+          echo '```'
+          cat "$WORK/module.prop"
+          echo '```'
+          echo ""
+          echo "| File | Size (bytes) |"
+          echo "|---|---|"
+          unzip -Zl "$ZIP" | awk '$1 ~ /^-/ {print "| " $NF " | " $4 " |"}'
+          echo ""
+          echo "APK SHA-256: \`$(sha256sum "$APK" | cut -d' ' -f1)\`"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload module zip
+      uses: actions/upload-artifact@v4
+      with:
+        name: PixelXpert-Next-module
+        path: output/PixelXpert-Next.zip
+        retention-days: 30
+        if-no-files-found: error
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: PixelXpert-Next-apk
+        path: app/build/outputs/apk/release/PixelXpert-Next.apk
+        retention-days: 30
+        if-no-files-found: error
+
+    - name: Replace the branch release
+      if: github.ref_type == 'branch'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BRANCH: ${{ github.ref_name }}
+      run: |
+        set -e
+        TAG="build-$(echo "$BRANCH" | tr '/ ' '--')"
+        # Earlier naming of the same per-branch release, cleaned up too.
+        LEGACY_TAG="release-$BRANCH"
+
+        for t in "$TAG" "$LEGACY_TAG"; do
+          if gh release view "$t" > /dev/null 2>&1; then
+            echo "Deleting release $t"
+            gh release delete "$t" --cleanup-tag --yes
+          fi
+          # A tag left behind without its release would pin the new one to an old commit.
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$t" > /dev/null 2>&1 || true
+        done
+
+        VERSION=$(sed -n 's/^version=//p' MagiskModBase/module.prop)
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        SUBJECT=$(git log -1 --format=%s)
+        {
+          echo "Automated build of branch \`$BRANCH\` at $GITHUB_SHA."
+          echo ""
+          echo "Last commit: $SUBJECT"
+          echo ""
+          echo "Module version: \`$VERSION\`. Signing: $SIGNING."
+          echo ""
+          echo "Install: KernelSU Next (or KernelSU / Magisk / APatch) > Modules > Install from storage > PixelXpert-Next.zip, then reboot. Flashing also installs the PixelXpert-Next app; if that fails the module retries at boot."
+        } > release-notes.md
+
+        PRERELEASE=""
+        if [ "$BRANCH" != "${{ github.event.repository.default_branch }}" ]; then
+          PRERELEASE="--prerelease"
+        fi
+
+        gh release create "$TAG" output/PixelXpert-Next.zip \
+          --target "$GITHUB_SHA" \
+          --title "PixelXpert-Next $VERSION ($BRANCH @ $SHORT_SHA)" \
+          --notes-file release-notes.md \
+          $PRERELEASE
+        echo "Release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
