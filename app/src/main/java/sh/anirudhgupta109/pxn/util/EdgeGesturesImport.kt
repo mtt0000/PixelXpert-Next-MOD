@@ -233,9 +233,13 @@ object EdgeGesturesImport {
 		}
 		if (eg.has("visualEffect")) out["EdgeVisualEffect"] = eg.optBoolean("visualEffect")
 		if (eg.has("effectColor")) out["EdgeEffectColor"] = eg.optInt("effectColor").toString()
-		eg.optInt("waveHeight", -1).takeIf { it > 0 }?.let { out["EdgeWaveHeight"] = (it / 2).coerceIn(8, 80).toFloat() }
-		eg.optInt("waveLength", -1).takeIf { it > 0 }?.let { out["EdgeWaveLength"] = it.coerceIn(60, 400).toFloat() }
-		if (eg.has("showActionIcon")) out["EdgeShowActionLabel"] = eg.optBoolean("showActionIcon")
+		// Same units (dp) as the app's.
+		eg.optInt("waveHeight", -1).takeIf { it > 0 }?.let { out["EdgeWaveHeight"] = it.coerceIn(8, 100).toFloat() }
+		eg.optInt("waveLength", -1).takeIf { it > 0 }?.let { out["EdgeWaveLength"] = it.coerceIn(60, 500).toFloat() }
+		if (eg.has("showActionIcon")) out["EdgeShowActionIcon"] = eg.optBoolean("showActionIcon")
+		if (eg.has("actionIconBg")) out["EdgeIconBgColor"] = eg.optInt("actionIconBg").toString()
+		if (eg.has("actionIconFg")) out["EdgeIconFgColor"] = eg.optInt("actionIconFg").toString()
+		if (eg.has("diagonalRange")) out["EdgeDiagonalRange"] = eg.optBoolean("diagonalRange")
 
 		return Result(out, gestures, skipped)
 	}

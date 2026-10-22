@@ -29,7 +29,7 @@ import kotlin.math.hypot
  * "left" on the bottom edge, and "down" is "right".
  *
  * A stroke is decided by the direction it takes once it has travelled
- * [swipeThreshold]: straight inwards, diagonally (25-65 degrees), or along the
+ * [swipeThreshold]: straight inwards, diagonally (30-65 degrees), or along the
  * edge. From there it can still turn into
  *  - a hold, when the finger then rests for [holdTimeout] (fires at once),
  *  - a back-and-forth, when it returns by [swipeThreshold] again,
@@ -55,12 +55,12 @@ class EdgeGestureView(
 		fun onEdgeGesture(view: EdgeGestureView, gesture: Int, rawX: Float, rawY: Float)
 
 		/**
-		 * The finger moved. [along] is its raw coordinate on the along axis,
-		 * [pull] how far inwards it is from where it started (never negative),
-		 * [candidate] the gesture a release now would fire, or -1.
-		 * [active] is false once the touch is over.
+		 * The finger moved to ([x], [y]) after coming down at ([downX],
+		 * [downY]), all in screen coordinates. [candidate] is the gesture a
+		 * release now would fire, or -1; [active] is false once the touch is
+		 * over.
 		 */
-		fun onEdgeTrack(view: EdgeGestureView, along: Float, pull: Float, candidate: Int, active: Boolean)
+		fun onEdgeTrack(view: EdgeGestureView, downX: Float, downY: Float, x: Float, y: Float, candidate: Int, active: Boolean)
 
 		fun onEdgeAdjustStart(view: EdgeGestureView)
 
@@ -116,7 +116,8 @@ class EdgeGestureView(
 		private const val DIR_DIAG_NEG = 5
 		private const val DIR_DIAG_POS = 6
 
-		private const val DIAG_MIN_DEGREES = 25.0
+		// The sectors Edge Gestures shades as its diagonal range.
+		private const val DIAG_MIN_DEGREES = 30.0
 		private const val DIAG_MAX_DEGREES = 65.0
 	}
 
@@ -424,13 +425,7 @@ class EdgeGestureView(
 
 	private fun track(active: Boolean) {
 		val candidate = if (active && !adjusting && direction != DIR_NONE) resolve() else NO_GESTURE
-		listener.onEdgeTrack(
-			this,
-			rawAlong(lastX, lastY),
-			maxOf(0f, inward(lastX - downX, lastY - downY)),
-			candidate,
-			active && !done,
-		)
+		listener.onEdgeTrack(this, downX, downY, lastX, lastY, candidate, active && !done)
 	}
 
 	private fun cancelPending() {

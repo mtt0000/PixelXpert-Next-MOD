@@ -452,6 +452,7 @@ private fun visibleBy(store: PrefStore, key: String?): Boolean {
 
 			"EdgeHandleColor", "EdgeHandleOpacity" -> store.getBoolean("EdgeShowHandle", false)
 			"EdgeEffectColor", "EdgeWaveHeight", "EdgeWaveLength" -> store.getBoolean("EdgeVisualEffect", true)
+			"EdgeIconBgColor", "EdgeIconFgColor" -> store.getBoolean("EdgeShowActionIcon", true)
 
 			"leftSwipeUpPercentage" -> store.string("leftSwipeUpAction", "-1") != "-1"
 			"rightSwipeUpPercentage" -> store.string("rightSwipeUpAction", "-1") != "-1"

@@ -702,7 +702,7 @@
     <string name="edge_wave_height_title">Altezza dell\'onda (dp)</string>
     <string name="edge_wave_length_title">Lunghezza dell\'onda (dp)</string>
     <string name="edge_show_label_title">Mostra il nome dell\'azione</string>
-    <string name="edge_show_label_summary">Durante lo swipe mostra cosa farà il rilascio del dito</string>
+    <string name="edge_show_label_summary">Scrive anche il nome dell\'azione accanto all\'icona</string>
     <string name="gesture_backup_title">Backup e ripristino</string>
     <string name="gesture_backup_summary">Salva, ripristina o importa da Edge Gestures</string>
     <string name="gesture_backup_export_title">Backup delle impostazioni dei gesti</string>
@@ -767,4 +767,10 @@
     <string name="action_power_off">Spegni (root)</string>
     <string name="action_reboot_recovery">Riavvia in recovery (root)</string>
     <string name="action_reboot_bootloader">Riavvia nel bootloader (root)</string>
+    <string name="edge_show_icon_title">Mostra l\'icona dell\'azione</string>
+    <string name="edge_show_icon_summary">Durante lo swipe un badge sul bordo mostra l\'azione che partirà al rilascio</string>
+    <string name="edge_icon_bg_title">Colore di sfondo dell\'icona</string>
+    <string name="edge_icon_fg_title">Colore dell\'icona</string>
+    <string name="edge_diagonal_range_title">Mostra l\'area diagonale</string>
+    <string name="edge_diagonal_range_summary">Evidenzia il settore in cui deve restare uno swipe diagonale mentre il dito è al suo interno</string>
 </resources>

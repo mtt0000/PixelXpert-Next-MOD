@@ -9,6 +9,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.graphics.drawable.Drawable
 import android.hardware.display.DisplayManager
 import android.media.AudioManager
 import android.os.Handler
@@ -110,6 +111,40 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 
 		private const val DISABLE_SHORT = 5000L
 
+		/** Drawable names to try for each built-in action's badge. */
+		private val ACTION_ICONS: Map<Int, List<String>> = mapOf(
+			SystemUIActions.ACTION_BACK to listOf("ic_sysbar_back", "ic_menu_revert"),
+			SystemUIActions.ACTION_HOME to listOf("ic_sysbar_home", "ic_menu_home"),
+			SystemUIActions.ACTION_RECENTS to listOf("ic_sysbar_recent", "ic_menu_recent_history"),
+			SystemUIActions.ACTION_PREVIOUS_APP to listOf("ic_media_rew"),
+			SystemUIActions.ACTION_FORWARD to listOf("ic_media_ff"),
+			SystemUIActions.ACTION_NOTIFICATION to listOf("ic_notifications_alert", "ic_popup_reminder"),
+			SystemUIActions.ACTION_QUICK_SETTINGS to listOf("ic_settings", "ic_menu_preferences"),
+			SystemUIActions.ACTION_POWER_MENU to listOf("ic_lock_power_off"),
+			SystemUIActions.ACTION_SLEEP to listOf("ic_lock_lock"),
+			SystemUIActions.ACTION_SCREENSHOT to listOf("ic_screenshot", "ic_menu_crop"),
+			SystemUIActions.ACTION_TORCH to listOf("ic_qs_flashlight", "ic_flashlight"),
+			SystemUIActions.ACTION_AUTO_ROTATE to listOf("ic_qs_auto_rotate", "ic_menu_rotate"),
+			SystemUIActions.ACTION_ASSISTANT to listOf("ic_btn_speak_now"),
+			SystemUIActions.ACTION_VOICE_COMMAND to listOf("ic_btn_speak_now"),
+			SystemUIActions.ACTION_SEARCH to listOf("ic_menu_search"),
+			SystemUIActions.ACTION_CAMERA to listOf("ic_menu_camera"),
+			SystemUIActions.ACTION_PLAY_PAUSE to listOf("ic_media_play"),
+			SystemUIActions.ACTION_MEDIA_NEXT to listOf("ic_media_next"),
+			SystemUIActions.ACTION_MEDIA_PREVIOUS to listOf("ic_media_previous"),
+			SystemUIActions.ACTION_VOLUME_PANEL to listOf("ic_volume_media", "ic_lock_silent_mode_off"),
+			SystemUIActions.ACTION_RINGER_MODE to listOf("ic_lock_silent_mode"),
+			SystemUIActions.ACTION_TOGGLE_AIRPLANE to listOf("ic_lock_airplane_mode"),
+			SystemUIActions.ACTION_APP_INFO to listOf("ic_menu_info_details"),
+			SystemUIActions.ACTION_KILL_APP to listOf("ic_menu_close_clear_cancel"),
+			SystemUIActions.ACTION_CLEAR_RECENTS to listOf("ic_menu_close_clear_cancel"),
+			SystemUIActions.ACTION_CLEAR_NOTIFICATIONS to listOf("ic_menu_delete"),
+			SystemUIActions.ACTION_SCROLL_TOP to listOf("arrow_up_float"),
+			SystemUIActions.ACTION_SCROLL_BOTTOM to listOf("arrow_down_float"),
+			SystemUIActions.ACTION_REBOOT to listOf("ic_restart", "ic_lock_power_off"),
+			SystemUIActions.ACTION_POWER_OFF to listOf("ic_lock_power_off"),
+		)
+
 		private var enabled = false
 		private val sideEnabled = booleanArrayOf(true, true, false)
 		private val orientation = intArrayOf(ORIENTATION_BOTH, ORIENTATION_BOTH, ORIENTATION_BOTH)
@@ -130,9 +165,14 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 		private var handleOpacity = 40
 		private var visualEffect = true
 		private var effectColor = 0xA0303030.toInt()
-		private var waveHeightDp = 24
-		private var waveLengthDp = 160
-		private var showActionLabel = true
+		// Edge Gestures' defaults.
+		private var waveHeightDp = 34
+		private var waveLengthDp = 250
+		private var showActionIcon = true
+		private var showActionLabel = false
+		private var diagonalRange = false
+		private var iconBackground = 0xFF3F51B5.toInt()
+		private var iconForeground = Color.WHITE
 		private var priorityOverSystemGesture = true
 		private var keyboardBehavior = KEYBOARD_UNDERNEATH
 		private var disableOnHome = false
@@ -193,9 +233,14 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 		handleOpacity = Xprefs.getSliderInt("EdgeHandleOpacity", 40)
 		visualEffect = Xprefs.getBoolean("EdgeVisualEffect", true)
 		effectColor = Xprefs.getInt("EdgeEffectColor", 0xA0303030.toInt())
-		waveHeightDp = Xprefs.getSliderInt("EdgeWaveHeight", 24)
-		waveLengthDp = Xprefs.getSliderInt("EdgeWaveLength", 160)
-		showActionLabel = Xprefs.getBoolean("EdgeShowActionLabel", true)
+		waveHeightDp = Xprefs.getSliderInt("EdgeWaveHeight", 34)
+		waveLengthDp = Xprefs.getSliderInt("EdgeWaveLength", 250)
+		showActionIcon = Xprefs.getBoolean("EdgeShowActionIcon", true)
+		showActionLabel = Xprefs.getBoolean("EdgeShowActionLabel", false)
+		diagonalRange = Xprefs.getBoolean("EdgeDiagonalRange", false)
+		iconBackground = Xprefs.getInt("EdgeIconBgColor", 0xFF3F51B5.toInt())
+		iconForeground = Xprefs.getInt("EdgeIconFgColor", Color.WHITE)
+		iconCache.clear()
 		priorityOverSystemGesture = Xprefs.getBoolean("EdgePriorityOverSystem", true)
 		keyboardBehavior = Xprefs.getString("EdgeKeyboardBehavior", KEYBOARD_UNDERNEATH.toString())!!.toIntOrNull() ?: KEYBOARD_UNDERNEATH
 		disableOnHome = Xprefs.getBoolean("EdgeDisableOnHome", false)
@@ -385,7 +430,7 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 
 	/** The touch-less window the wave, the action name and the level are drawn in. */
 	private fun updateEffect(side: Int) {
-		val wanted = visualEffect || showActionLabel || adjust[side] != ADJUST_NONE
+		val wanted = visualEffect || showActionIcon || showActionLabel || diagonalRange || adjust[side] != ADJUST_NONE
 		if (!wanted) {
 			effects[side]?.let { removeWindow(it) }
 			effects[side] = null
@@ -400,6 +445,14 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 		view.waveColor = effectColor
 		view.waveHeight = waveHeightDp * density
 		view.waveLength = waveLengthDp * density
+		view.showBadge = showActionIcon
+		view.showLabel = showActionLabel
+		view.diagonalRange = diagonalRange && (
+			SystemUIActions.isBound(actions[side][EdgeGestureView.GESTURE_SWIPE_DIAG_UP]) ||
+				SystemUIActions.isBound(actions[side][EdgeGestureView.GESTURE_SWIPE_DIAG_DOWN])
+			)
+		view.iconBackground = iconBackground
+		view.iconForeground = iconForeground
 
 		val depth = (280 * density).roundToInt()
 		val screen = windowManager!!.currentWindowMetrics.bounds
@@ -685,10 +738,66 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 		}
 	}
 
-	override fun onEdgeTrack(view: EdgeGestureView, along: Float, pull: Float, candidate: Int, active: Boolean) {
+	override fun onEdgeTrack(view: EdgeGestureView, downX: Float, downY: Float, x: Float, y: Float, candidate: Int, active: Boolean) {
 		val effect = effects[view.side] ?: return
-		val label = if (showActionLabel && candidate != NO_GESTURE) labelOf(view.side, candidate) else null
-		effect.update(along, pull, label, active)
+		if (!active) {
+			effect.release()
+			return
+		}
+		val bound = candidate != NO_GESTURE
+		effect.track(
+			downX, downY, x, y,
+			if (bound) labelOf(view.side, candidate) else null,
+			if (bound && showActionIcon) iconOf(view.side, candidate) else null,
+		)
+	}
+
+	private val iconCache = HashMap<String, Drawable?>()
+
+	/**
+	 * The badge icon: the app's own icon, the shortcut's (its target
+	 * activity's), or a system icon for a built-in action. Null - the name is
+	 * shown instead - when there is none.
+	 */
+	private fun iconOf(side: Int, gesture: Int): Drawable? {
+		val value = actions[side][gesture].trim()
+		return iconCache.getOrPut(value) {
+			try {
+				val pm = mContext.packageManager
+				when {
+					value.startsWith(SystemUIActions.APP_PREFIX) ->
+						pm.getApplicationIcon(value.removePrefix(SystemUIActions.APP_PREFIX)).mutate()
+
+					value.startsWith(SystemUIActions.INTENT_PREFIX) -> {
+						val uri = value.removePrefix(SystemUIActions.INTENT_PREFIX)
+						pm.getActivityIcon(Intent.parseUri(uri, if (uri.startsWith("intent:")) Intent.URI_INTENT_SCHEME else 0)).mutate()
+					}
+
+					else -> systemIcon(SystemUIActions.code(value))
+				}
+			} catch (ignored: Throwable) {
+				null
+			}
+		}
+	}
+
+	/** A glyph for a built-in action, looked up by name in SystemUI and then the framework. */
+	private fun systemIcon(code: Int): Drawable? {
+		val names = ACTION_ICONS[code] ?: return null
+		val systemUi = mContext.resources
+		val framework = android.content.res.Resources.getSystem()
+		for (name in names) {
+			val id = systemUi.getIdentifier(name, "drawable", mContext.packageName)
+			val drawable = when {
+				id != 0 -> systemUi.getDrawable(id, mContext.theme)
+				framework.getIdentifier(name, "drawable", "android") != 0 ->
+					framework.getDrawable(framework.getIdentifier(name, "drawable", "android"), null)
+				else -> null
+			} ?: continue
+			// App and shortcut icons keep their colours; system glyphs take the badge's.
+			return drawable.mutate().apply { setTint(iconForeground) }
+		}
+		return null
 	}
 
 	private fun labelOf(side: Int, gesture: Int): String? {
@@ -730,7 +839,7 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 
 	override fun onEdgeAdjustEnd(view: EdgeGestureView) {
 		if (adjust[view.side] == ADJUST_BRIGHTNESS) writeLevel(ADJUST_BRIGHTNESS, adjustLevel, persist = true)
-		effects[view.side]?.update(0f, 0f, null, false)
+		effects[view.side]?.release()
 	}
 
 	private fun showLevel(side: Int) {
