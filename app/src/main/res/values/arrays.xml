@@ -96,21 +96,62 @@
 		<item>@string/action_home</item>
 		<item>@string/action_recents</item>
 		<item>@string/action_previous_app</item>
+		<item>@string/action_forward</item>
+		<item>@string/action_split_screen</item>
+		<item>@string/toggle_one_handed</item>
 		<item>@string/toggle_notification</item>
 		<item>@string/action_quick_settings</item>
-		<item>@string/screenshot</item>
+		<item>@string/action_clear_notifications</item>
 		<item>@string/action_power_menu</item>
+		<item>@string/action_internet_panel</item>
+		<item>@string/action_wifi_panel</item>
+		<item>@string/action_nfc_panel</item>
+		<item>@string/screenshot</item>
+		<item>@string/action_screen_record</item>
 		<item>@string/sleep</item>
-		<item>@string/kill_foreground_app</item>
-		<item>@string/torch</item>
+		<item>@string/action_blackout</item>
+		<item>@string/action_keep_awake</item>
 		<item>@string/action_auto_rotate</item>
+		<item>@string/action_toggle_dark_mode</item>
+		<item>@string/action_toggle_auto_brightness</item>
+		<item>@string/kill_foreground_app</item>
+		<item>@string/action_clear_recents</item>
+		<item>@string/action_app_info</item>
 		<item>@string/assistant</item>
+		<item>@string/action_voice_command</item>
+		<item>@string/action_search</item>
 		<item>@string/camera</item>
+		<item>@string/app_switch_tile_title</item>
+		<item>@string/action_tap_through</item>
+		<item>@string/action_scroll_top</item>
+		<item>@string/action_scroll_bottom</item>
+		<item>@string/action_paste</item>
 		<item>@string/pause_media</item>
 		<item>@string/skip_media_next</item>
 		<item>@string/skip_media_prev</item>
 		<item>@string/action_volume_panel</item>
-		<item>@string/app_switch_tile_title</item>
+		<item>@string/action_volume_up</item>
+		<item>@string/action_volume_down</item>
+		<item>@string/action_toggle_mute</item>
+		<item>@string/action_ringtone_volume</item>
+		<item>@string/action_notification_volume</item>
+		<item>@string/action_system_volume</item>
+		<item>@string/action_ringer_mode</item>
+		<item>@string/torch</item>
+		<item>@string/action_toggle_wifi</item>
+		<item>@string/action_toggle_bluetooth</item>
+		<item>@string/action_toggle_mobile_data</item>
+		<item>@string/action_toggle_airplane</item>
+		<item>@string/action_toggle_dnd</item>
+		<item>@string/action_toggle_nfc</item>
+		<item>@string/action_toggle_location</item>
+		<item>@string/action_disable_5s</item>
+		<item>@string/action_disable_until_touch</item>
+		<item>@string/action_restart_systemui</item>
+		<item>@string/action_reboot</item>
+		<item>@string/action_power_off</item>
+		<item>@string/action_reboot_recovery</item>
+		<item>@string/action_reboot_bootloader</item>
 	</string-array>
 
 	<string-array name="edge_action_codes">
@@ -119,21 +160,107 @@
 		<item>10</item>
 		<item>11</item>
 		<item>12</item>
+		<item>41</item>
+		<item>24</item>
+		<item>5</item>
 		<item>4</item>
 		<item>13</item>
-		<item>1</item>
+		<item>52</item>
 		<item>14</item>
+		<item>35</item>
+		<item>36</item>
+		<item>37</item>
+		<item>1</item>
+		<item>23</item>
 		<item>7</item>
-		<item>3</item>
-		<item>15</item>
+		<item>30</item>
+		<item>59</item>
 		<item>16</item>
+		<item>49</item>
+		<item>50</item>
+		<item>3</item>
+		<item>53</item>
+		<item>34</item>
 		<item>17</item>
+		<item>31</item>
+		<item>32</item>
 		<item>22</item>
+		<item>8</item>
+		<item>25</item>
+		<item>26</item>
+		<item>27</item>
+		<item>33</item>
 		<item>18</item>
 		<item>19</item>
 		<item>20</item>
 		<item>21</item>
-		<item>8</item>
+		<item>60</item>
+		<item>61</item>
+		<item>62</item>
+		<item>38</item>
+		<item>39</item>
+		<item>40</item>
+		<item>51</item>
+		<item>15</item>
+		<item>42</item>
+		<item>43</item>
+		<item>44</item>
+		<item>45</item>
+		<item>46</item>
+		<item>47</item>
+		<item>48</item>
+		<item>28</item>
+		<item>29</item>
+		<item>54</item>
+		<item>55</item>
+		<item>56</item>
+		<item>57</item>
+		<item>58</item>
+	</string-array>
+
+	<!-- Orientation, keyboard and pull-and-slide codes match the Edge Gestures app. -->
+	<string-array name="edge_orientation_titles">
+		<item>@string/edge_orientation_both</item>
+		<item>@string/edge_orientation_portrait</item>
+		<item>@string/edge_orientation_landscape</item>
+	</string-array>
+
+	<string-array name="edge_orientation_codes">
+		<item>3</item>
+		<item>1</item>
+		<item>2</item>
+	</string-array>
+
+	<string-array name="edge_keyboard_titles">
+		<item>@string/edge_keyboard_underneath</item>
+		<item>@string/edge_keyboard_overlap</item>
+		<item>@string/edge_keyboard_shift</item>
+		<item>@string/edge_keyboard_hide</item>
+	</string-array>
+
+	<string-array name="edge_keyboard_codes">
+		<item>2</item>
+		<item>3</item>
+		<item>1</item>
+		<item>4</item>
+	</string-array>
+
+	<string-array name="edge_adjust_titles">
+		<item>@string/none</item>
+		<item>@string/edge_adjust_brightness</item>
+		<item>@string/edge_adjust_media</item>
+		<item>@string/edge_adjust_ringtone</item>
+		<item>@string/edge_adjust_notification</item>
+		<item>@string/edge_adjust_system</item>
+	</string-array>
+
+	<string-array name="edge_adjust_codes">
+		<item>0</item>
+		<item>1</item>
+		<item>2</item>
+		<item>7</item>
+		<item>6</item>
+		<item>5</item>
 	</string-array>
 
     <string-array name="sbc_position_names">

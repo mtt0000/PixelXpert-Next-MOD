@@ -201,6 +201,22 @@ data class ColorPref(
 	override val ignore: Boolean = false,
 ) : ValuePref
 
+/**
+ * A gesture action, stored as a String: one of `R.array.edge_action_codes`,
+ * `app:<package>` to open an app, or `intent:<uri>` for a shortcut, whose
+ * name is kept next to it under `<key>Label`.
+ */
+data class ActionPref(
+	override val key: String,
+	override val title: Int = 0,
+	override val titleText: String? = null,
+	override val summary: Int = 0,
+	override val default: String? = null,
+	override val dependency: String? = null,
+	override val icon: Int = 0,
+	override val ignore: Boolean = false,
+) : ValuePref
+
 /** Value is minutes-since-midnight. */
 data class TimePref(
 	override val key: String,

@@ -9,6 +9,18 @@ val gesture_nav_prefs: PrefScreen = PrefScreen(
 	nodes = listOf(
 			Illustration(key = "system_nav_fully_gestural_illustration", lottieRawRes = R.raw.lottie_system_nav_fully_gestural, ignore = true),
 			Category(
+	title = R.string.edge_gestures_title,
+	ignore = true,
+	children = listOf(
+				SwitchPref(key = "EdgeGesturesEnabled", title = R.string.edge_gestures_enable_title, summary = R.string.edge_gestures_summary, default = "false", prominent = true),
+				NavRow(key = "edge_left", title = R.string.edge_left_cat, route = "edge_left"),
+				NavRow(key = "edge_right", title = R.string.edge_right_cat, route = "edge_right"),
+				NavRow(key = "edge_bottom", title = R.string.edge_bottom_cat, route = "edge_bottom"),
+				NavRow(key = "edge_common", title = R.string.edge_common_cat, summary = R.string.edge_common_summary, route = "edge_common"),
+				NavRow(key = "gesture_backup", title = R.string.gesture_backup_title, summary = R.string.gesture_backup_summary, route = "gesture_backup"),
+	),
+			),
+			Category(
 	title = R.string.back_gesture_category_title,
 	ignore = true,
 	children = listOf(
@@ -23,11 +35,11 @@ val gesture_nav_prefs: PrefScreen = PrefScreen(
 	ignore = true,
 	children = listOf(
 				SwitchPref(key = "FCLongSwipeEnabled", title = R.string.gesture_nav_long_swipe_fc_title, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
-				ListPref(key = "leftSwipeUpAction", title = R.string.gesture_nav_left_swipe_up_title, default = "-1", entries = R.array.custom_action_titles, entryValues = R.array.custom_action_codes),
+				ActionPref(key = "leftSwipeUpAction", title = R.string.gesture_nav_left_swipe_up_title, default = "-1"),
 				SliderPref(key = "leftSwipeUpPercentage", title = R.string.gesture_nav_left_swipe_up_percent, default = "25", min = 5f, max = 40f, step = 1f, valueCount = 1),
-				ListPref(key = "rightSwipeUpAction", title = R.string.gesture_nav_right_swipe_up_title, default = "-1", entries = R.array.custom_action_titles, entryValues = R.array.custom_action_codes),
+				ActionPref(key = "rightSwipeUpAction", title = R.string.gesture_nav_right_swipe_up_title, default = "-1"),
 				SliderPref(key = "rightSwipeUpPercentage", title = R.string.gesture_nav_right_swipe_up_percent, default = "25", min = 5f, max = 40f, step = 1f, valueCount = 1),
-				ListPref(key = "twoFingerSwipeUpAction", title = R.string.gesture_nav_two_finger_title, default = "None", entries = R.array.custom_action_titles, entryValues = R.array.custom_action_codes),
+				ActionPref(key = "twoFingerSwipeUpAction", title = R.string.gesture_nav_two_finger_title, default = "-1"),
 				SliderPref(key = "swipeUpPercentage", title = R.string.gesture_nav_swipe_up_height, default = "20", min = 5f, max = 50f, step = 5f, valueCount = 1),
 	),
 			),

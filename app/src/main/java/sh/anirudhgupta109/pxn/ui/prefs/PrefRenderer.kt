@@ -270,6 +270,7 @@ private fun PrefNodeRow(
 		is TextPref -> TextItem(node, store)
 		is ColorPref -> ColorItem(node, store)
 		is TimePref -> TimeItem(node, store)
+		is ActionPref -> ActionPrefItem(node, store)
 	}
 }
 
@@ -290,7 +291,7 @@ private fun PrefNodeRow(
  * composable either: a separate scope with stable parameters can itself be
  * skipped, dropping the read before it ever registers.
  */
-private fun enabledBy(store: PrefStore, node: ValuePref): Boolean {
+internal fun enabledBy(store: PrefStore, node: ValuePref): Boolean {
 	val dep = node.dependency ?: return true
 	val def = preferenceDefaults[dep] == "true"
 	return if (store.contains(dep)) store.getBoolean(dep, def) else def
@@ -306,7 +307,7 @@ private fun enabledBy(store: PrefStore, node: ValuePref): Boolean {
  * gave no sign why. 0.38 is M3's own disabled level, matching the widgets
  * these rows sit beside when they are disabled.
  */
-private fun Modifier.dimUnless(enabled: Boolean): Modifier =
+internal fun Modifier.dimUnless(enabled: Boolean): Modifier =
 	if (enabled) this else this.alpha(0.38f)
 
 /**
@@ -359,6 +360,7 @@ private fun PrefStore.string(key: String, default: String): String =
  */
 private fun visibleBy(store: PrefStore, key: String?): Boolean {
 	if (key == null) return true
+	edgeSideVisibility(store, key)?.let { return it }
 	return try {
 		when (key) {
 			"ForceThemedLauncherIcons" -> !store.getBoolean("DisableThemedIconsPref", false)
@@ -447,15 +449,8 @@ private fun visibleBy(store: PrefStore, key: String?): Boolean {
 			"BackLeftHeight" -> store.getBoolean("BackFromLeft", true)
 			"BackRightHeight" -> store.getBoolean("BackFromRight", true)
 
-			"EdgeLeftLength", "EdgeLeftPosition", "EdgeLeftTap", "EdgeLeftDoubleTap",
-			"EdgeLeftLongPress", "EdgeLeftSwipeIn", "EdgeLeftSwipeUp", "EdgeLeftSwipeDown" ->
-				store.getBoolean("EdgeLeftEnabled", true)
-
-			"EdgeRightLength", "EdgeRightPosition", "EdgeRightTap", "EdgeRightDoubleTap",
-			"EdgeRightLongPress", "EdgeRightSwipeIn", "EdgeRightSwipeUp", "EdgeRightSwipeDown" ->
-				store.getBoolean("EdgeRightEnabled", true)
-
 			"EdgeHandleColor", "EdgeHandleOpacity" -> store.getBoolean("EdgeShowHandle", false)
+			"EdgeEffectColor", "EdgeWaveHeight", "EdgeWaveLength" -> store.getBoolean("EdgeVisualEffect", true)
 
 			"leftSwipeUpPercentage" -> store.string("leftSwipeUpAction", "-1") != "-1"
 			"rightSwipeUpPercentage" -> store.string("rightSwipeUpAction", "-1") != "-1"
@@ -476,6 +471,20 @@ private fun visibleBy(store: PrefStore, key: String?): Boolean {
 }
 
 /**
+ * Every row of an edge's screen but its own switch only shows while that
+ * edge is on; null for keys that belong to no edge.
+ */
+private fun edgeSideVisibility(store: PrefStore, key: String): Boolean? {
+	val side = listOf("Left", "Right", "Bottom").firstOrNull { key.startsWith("Edge$it") } ?: return null
+	if (key == "Edge${side}Enabled") return null
+	return try {
+		store.getBoolean("Edge${side}Enabled", side != "Bottom")
+	} catch (ignored: Throwable) {
+		true
+	}
+}
+
+/**
  * Returns null when the row declares no icon, so `ListItem` reserves no
  * leading space at all. Size and tint: 20dp, tinted `?attr/colorOnSurface`.
  *
@@ -483,7 +492,7 @@ private fun visibleBy(store: PrefStore, key: String?): Boolean {
  * [MaterialTheme.colorScheme] may only be read during composition.
  */
 @Composable
-private fun leadingIcon(icon: Int): (@Composable () -> Unit)? {
+internal fun leadingIcon(icon: Int): (@Composable () -> Unit)? {
 	if (icon == 0) return null
 	val tint = MaterialTheme.colorScheme.onSurface
 	return {
@@ -775,7 +784,7 @@ private fun summaryOrNull(res: Int, modifier: Modifier = Modifier): (@Composable
  * guards `stringResource(0)`, which throws `Resources$NotFoundException`.
  */
 @Composable
-private fun titleText(node: PrefNode): String =
+internal fun titleText(node: PrefNode): String =
 	node.titleText ?: if (node.title == 0) "" else stringResource(node.title)
 
 /**

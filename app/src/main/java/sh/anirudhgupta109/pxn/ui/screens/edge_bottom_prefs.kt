@@ -1,0 +1,71 @@
+package sh.anirudhgupta109.pxn.ui.screens
+
+import sh.anirudhgupta109.pxn.R
+import sh.anirudhgupta109.pxn.ui.prefs.PrefScreen
+import sh.anirudhgupta109.pxn.ui.prefs.node.*
+
+val edge_bottom_prefs: PrefScreen = PrefScreen(
+	key = "edge_bottom_prefs",
+	nodes = listOf(
+			Category(
+	title = R.string.edge_bottom_cat,
+	ignore = true,
+	children = listOf(
+				SwitchPref(key = "EdgeBottomEnabled", title = R.string.edge_side_enabled_title, default = "false", dependency = "EdgeGesturesEnabled", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
+				ListPref(key = "EdgeBottomOrientation", title = R.string.edge_orientation_title, default = "3", entries = R.array.edge_orientation_titles, entryValues = R.array.edge_orientation_codes, dependency = "EdgeGesturesEnabled"),
+				SliderPref(key = "EdgeBottomLength", title = R.string.edge_width_title, default = "60", min = 10f, max = 100f, step = 1f, dependency = "EdgeGesturesEnabled"),
+				SliderPref(key = "EdgeBottomPosition", title = R.string.edge_hposition_title, default = "50", min = 0f, max = 100f, step = 1f, dependency = "EdgeGesturesEnabled"),
+				SliderPref(key = "EdgeBottomOffset", title = R.string.edge_bottom_offset_title, default = "0", min = 0f, max = 200f, step = 2f, dependency = "EdgeGesturesEnabled"),
+				ListPref(key = "EdgeBottomAdjust", title = R.string.edge_adjust_title, summary = R.string.edge_adjust_summary, default = "0", entries = R.array.edge_adjust_titles, entryValues = R.array.edge_adjust_codes, dependency = "EdgeGesturesEnabled"),
+	),
+			),
+			Category(
+	title = R.string.edge_taps_cat,
+	ignore = true,
+	children = listOf(
+				ActionPref(key = "EdgeBottomTap", title = R.string.edge_gesture_tap, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomDoubleTap", title = R.string.edge_gesture_double_tap, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomTripleTap", title = R.string.edge_gesture_triple_tap, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomLongPress", title = R.string.edge_gesture_long_press, default = "-1", dependency = "EdgeGesturesEnabled"),
+	),
+			),
+			Category(
+	title = R.string.edge_swipe_in_cat,
+	ignore = true,
+	children = listOf(
+				ActionPref(key = "EdgeBottomSwipeIn", title = R.string.edge_gesture_swipe_in, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomSwipeInHold", title = R.string.edge_gesture_swipe_in_hold, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomSwipeInOut", title = R.string.edge_gesture_swipe_in_out, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomLongSwipeIn", title = R.string.edge_gesture_long_swipe_in, default = "-1", dependency = "EdgeGesturesEnabled"),
+	),
+			),
+			Category(
+	title = R.string.edge_swipe_left_cat,
+	ignore = true,
+	children = listOf(
+				ActionPref(key = "EdgeBottomSwipeUp", title = R.string.edge_gesture_swipe_left, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomSwipeUpHold", title = R.string.edge_gesture_swipe_left_hold, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomSwipeUpDown", title = R.string.edge_gesture_swipe_left_right, default = "-1", dependency = "EdgeGesturesEnabled"),
+	),
+			),
+			Category(
+	title = R.string.edge_swipe_right_cat,
+	ignore = true,
+	children = listOf(
+				ActionPref(key = "EdgeBottomSwipeDown", title = R.string.edge_gesture_swipe_right, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomSwipeDownHold", title = R.string.edge_gesture_swipe_right_hold, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomSwipeDownUp", title = R.string.edge_gesture_swipe_right_left, default = "-1", dependency = "EdgeGesturesEnabled"),
+	),
+			),
+			Category(
+	title = R.string.edge_diagonal_cat,
+	ignore = true,
+	children = listOf(
+				ActionPref(key = "EdgeBottomSwipeDiagUp", title = R.string.edge_gesture_diag_left, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomSwipeDiagDown", title = R.string.edge_gesture_diag_right, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomLongSwipeDiagUp", title = R.string.edge_gesture_long_diag_left, default = "-1", dependency = "EdgeGesturesEnabled"),
+				ActionPref(key = "EdgeBottomLongSwipeDiagDown", title = R.string.edge_gesture_long_diag_right, default = "-1", dependency = "EdgeGesturesEnabled"),
+	),
+			),
+	),
+)

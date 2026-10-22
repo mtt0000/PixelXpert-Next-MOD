@@ -11,7 +11,10 @@ import sh.anirudhgupta109.pxn.R
 val routeToScreenKey: Map<String, String> = mapOf(
 	"custom" to "custom_prefs",
 	"dialer" to "dialer_prefs",
-	"edge_gestures" to "edge_gestures_prefs",
+	"edge_bottom" to "edge_bottom_prefs",
+	"edge_common" to "edge_common_prefs",
+	"edge_left" to "edge_left_prefs",
+	"edge_right" to "edge_right_prefs",
 	"gesture_nav" to "gesture_nav_prefs",
 	"hot_spot" to "hotspot_prefs",
 	"lock_screen" to "lock_screen_prefs",
@@ -37,7 +40,10 @@ val unportedRoutes: Set<String> = setOf(
 val searchScreenTitles: Map<String, Int> = mapOf(
 	"custom_prefs" to R.string.custom_header,
 	"dialer_prefs" to R.string.dialer_header,
-	"edge_gestures_prefs" to R.string.edge_gestures_title,
+	"edge_bottom_prefs" to R.string.edge_bottom_cat,
+	"edge_common_prefs" to R.string.edge_common_cat,
+	"edge_left_prefs" to R.string.edge_left_cat,
+	"edge_right_prefs" to R.string.edge_right_cat,
 	"gesture_nav_prefs" to R.string.gesturenav_header,
 	"hotspot_prefs" to R.string.hotspot_header,
 	"lock_screen_prefs" to R.string.lockscreen_header_title,

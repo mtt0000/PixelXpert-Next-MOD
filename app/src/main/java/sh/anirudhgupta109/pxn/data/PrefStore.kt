@@ -15,6 +15,8 @@ import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.io.OutputStream
 import kotlin.math.roundToInt
+import org.json.JSONArray
+import org.json.JSONObject
 import sh.anirudhgupta109.pxn.BuildConfig
 import sh.anirudhgupta109.pxn.ui.prefs.node.ValuePref
 
@@ -277,6 +279,100 @@ class PrefStore(context: Context) {
 				is Long -> editor.putLong(key, value)
 				is Set<*> -> editor.putStringSet(key, value.filterIsInstance<String>().toSet())
 				else -> Unit // unknown type: ignore rather than abort the import
+			}
+		}
+		val ok = editor.commit()
+		_revision.value++
+		return ok
+	}
+
+	/**
+	 * Writes the stored keys [include] accepts to [uri] as JSON, each value
+	 * tagged with its type so [importJson] can put it back as it was.
+	 * Readable on purpose: a backup of a handful of settings is something
+	 * people look into and edit.
+	 */
+	fun exportJson(uri: Uri, format: String, include: (String) -> Boolean): Boolean = try {
+		val values = JSONObject()
+		for ((key, value) in prefs.all) {
+			if (!include(key) || value == null) continue
+			val entry = JSONObject()
+			when (value) {
+				is Boolean -> entry.put("t", "b").put("v", value)
+				is Int -> entry.put("t", "i").put("v", value)
+				is Long -> entry.put("t", "l").put("v", value)
+				is Float -> entry.put("t", "f").put("v", value.toDouble())
+				is String -> entry.put("t", "s").put("v", value)
+				is Set<*> -> entry.put("t", "set").put("v", JSONArray(value.filterIsInstance<String>()))
+				else -> continue
+			}
+			values.put(key, entry)
+		}
+		val root = JSONObject()
+			.put("format", format)
+			.put("version", 1)
+			.put("app", BuildConfig.VERSION_NAME)
+			.put("prefs", values)
+		appContext.contentResolver.openOutputStream(uri)?.use {
+			it.write(root.toString(2).toByteArray())
+			true
+		} ?: false
+	} catch (e: Exception) {
+		false
+	}
+
+	/**
+	 * Restores a file [exportJson] wrote with the same [format]. Keys
+	 * [include] accepts are cleared first, so a restore brings the settings
+	 * back exactly; everything else is left alone. Returns the number of
+	 * values restored, or -1 when the file is not such a backup.
+	 */
+	fun importJson(uri: Uri, format: String, include: (String) -> Boolean): Int = try {
+		val text = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: ""
+		val root = JSONObject(text)
+		if (root.optString("format") != format) {
+			-1
+		} else {
+			val values = root.getJSONObject("prefs")
+			val restored = LinkedHashMap<String, Any?>()
+			for (key in values.keys()) {
+				if (!include(key)) continue
+				val entry = values.getJSONObject(key)
+				restored[key] = when (entry.getString("t")) {
+					"b" -> entry.getBoolean("v")
+					"i" -> entry.getInt("v")
+					"l" -> entry.getLong("v")
+					"f" -> entry.getDouble("v").toFloat()
+					"set" -> entry.getJSONArray("v").let { array -> (0 until array.length()).map { array.getString(it) }.toSet() }
+					else -> entry.getString("v")
+				}
+			}
+			replace(include, restored)
+			restored.size
+		}
+	} catch (e: Exception) {
+		-1
+	}
+
+	/**
+	 * Drops every key [include] accepts and writes [values] in one commit,
+	 * so the hooks see the new set at once rather than key by key.
+	 */
+	fun replace(include: (String) -> Boolean, values: Map<String, Any?>): Boolean {
+		val editor = prefs.edit()
+		for (key in prefs.all.keys) {
+			if (include(key)) editor.remove(key)
+		}
+		for ((key, value) in values) {
+			when (value) {
+				is Boolean -> editor.putBoolean(key, value)
+				is String -> editor.putString(key, value)
+				is Int -> editor.putInt(key, value)
+				is Float -> editor.putFloat(key, value)
+				is Long -> editor.putLong(key, value)
+				is Set<*> -> editor.putStringSet(key, value.filterIsInstance<String>().toSet())
+				null -> editor.remove(key)
+				else -> Unit
 			}
 		}
 		val ok = editor.commit()

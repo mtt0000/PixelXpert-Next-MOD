@@ -68,6 +68,7 @@ import sh.anirudhgupta109.pxn.ui.screens.preferenceScreens
 import sh.anirudhgupta109.pxn.ui.screens.routeToScreenKey
 import sh.anirudhgupta109.pxn.ui.hooks.HooksScreen
 import sh.anirudhgupta109.pxn.ui.hiddenapps.EdgeExcludedAppsScreen
+import sh.anirudhgupta109.pxn.ui.hiddenapps.GestureBackupScreen
 import sh.anirudhgupta109.pxn.ui.hiddenapps.HiddenAppsScreen
 import sh.anirudhgupta109.pxn.ui.iconpack.IconPackScreen
 import sh.anirudhgupta109.pxn.ui.search.SearchScreen
@@ -108,6 +109,9 @@ sealed interface Route : NavKey {
 
 	@Serializable
 	data object EdgeExcludedApps : Route
+
+	@Serializable
+	data object GestureBackup : Route
 
 	/**
 	 * Bottom-navigation tabs. Distinct keys rather than [Unported] so each can
@@ -152,6 +156,7 @@ private val bespokeRoutes: Map<String, NavKey> = mapOf(
 	"icon_pack" to Route.IconPack,
 	"hidden_apps" to Route.HiddenApps,
 	"edge_excluded_apps" to Route.EdgeExcludedApps,
+	"gesture_backup" to Route.GestureBackup,
 	// Settings' "Check for updates" row points at the update screen the
 	// bottom nav also reaches - and there is no `update_prefs` preference XML
 	// for routeToScreenKey to map to, so without this entry it falls through
@@ -393,6 +398,7 @@ fun PxnNav(startRoute: Route? = null) {
 		is Route.IconPack -> R.string.icon_packs_title
 		is Route.HiddenApps -> R.string.hidden_apps_title
 		is Route.EdgeExcludedApps -> R.string.edge_excluded_apps_title
+		is Route.GestureBackup -> R.string.gesture_backup_title
 		is Route.Update -> R.string.navigation_update
 		is Route.Hooks -> R.string.navigation_hooks
 		is Route.Settings -> R.string.navigation_settings
@@ -531,6 +537,7 @@ fun PxnNav(startRoute: Route? = null) {
 				entry<Route.IconPack> { NavScene { IconPackScreen() } }
 				entry<Route.HiddenApps> { NavScene { HiddenAppsScreen() } }
 				entry<Route.EdgeExcludedApps> { NavScene { EdgeExcludedAppsScreen() } }
+				entry<Route.GestureBackup> { NavScene { GestureBackupScreen() } }
 				entry<Route.Search> {
 					NavScene {
 						SearchScreen(

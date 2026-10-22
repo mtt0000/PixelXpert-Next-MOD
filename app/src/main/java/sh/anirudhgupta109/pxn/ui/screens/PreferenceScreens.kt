@@ -5,7 +5,10 @@ import sh.anirudhgupta109.pxn.ui.prefs.PrefScreen
 val preferenceScreens: Map<String, PrefScreen> = mapOf(
 			"custom_prefs" to custom_prefs,
 			"dialer_prefs" to dialer_prefs,
-			"edge_gestures_prefs" to edge_gestures_prefs,
+			"edge_bottom_prefs" to edge_bottom_prefs,
+			"edge_common_prefs" to edge_common_prefs,
+			"edge_left_prefs" to edge_left_prefs,
+			"edge_right_prefs" to edge_right_prefs,
 			"gesture_nav_prefs" to gesture_nav_prefs,
 			"header_preferences" to header_preferences,
 			"hotspot_prefs" to hotspot_prefs,

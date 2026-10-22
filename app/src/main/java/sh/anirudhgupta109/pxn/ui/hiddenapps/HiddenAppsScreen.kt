@@ -164,7 +164,7 @@ private fun AppListScreen(
 	}
 
 	if (showAdd) {
-		AddAppDialog(
+		AppPickerDialog(
 			title = addTitle,
 			alreadyHidden = hidden,
 			onPick = { pkg ->
@@ -176,8 +176,9 @@ private fun AppListScreen(
 	}
 }
 
+/** Lists the launchable apps, minus [alreadyHidden]; a tap picks one. */
 @Composable
-private fun AddAppDialog(
+internal fun AppPickerDialog(
 	title: Int,
 	alreadyHidden: List<String>,
 	onPick: (String) -> Unit,
@@ -232,7 +233,7 @@ private fun AddAppDialog(
 }
 
 @Composable
-private fun AppIcon(packageName: String) {
+internal fun AppIcon(packageName: String) {
 	val context = LocalContext.current
 	val bitmap = remember(packageName) {
 		try {
@@ -248,7 +249,7 @@ private fun AppIcon(packageName: String) {
 	}
 }
 
-private fun labelOf(context: android.content.Context, packageName: String): String = try {
+internal fun labelOf(context: android.content.Context, packageName: String): String = try {
 	val pm = context.packageManager
 	pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
 } catch (ignored: Throwable) {
