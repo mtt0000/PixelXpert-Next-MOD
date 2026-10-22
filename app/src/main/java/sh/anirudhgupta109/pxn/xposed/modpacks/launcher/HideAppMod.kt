@@ -7,14 +7,16 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageButton
-import android.widget.Toast
+import de.robv.android.xposed.XposedHelpers
 import io.github.libxposed.api.XposedModuleInterface
+import java.util.concurrent.Executors
 import sh.anirudhgupta109.pxn.R
 import sh.anirudhgupta109.pxn.util.HiddenApps
 import sh.anirudhgupta109.pxn.xposed.XPrefs.Xprefs
 import sh.anirudhgupta109.pxn.xposed.XposedModPack
 import sh.anirudhgupta109.pxn.xposed.annotations.LauncherModPack
 import sh.anirudhgupta109.pxn.xposed.utils.RecentsTaskTools
+import sh.anirudhgupta109.pxn.xposed.utils.SystemUtils
 import sh.anirudhgupta109.pxn.xposed.utils.TaskButtonsHost
 import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
 import sh.anirudhgupta109.pxn.xposed.utils.toolkit.Logger
@@ -30,12 +32,25 @@ import sh.anirudhgupta109.pxn.xposed.utils.toolkit.Logger
  *
  * The list is the CSV preference [HiddenApps.PREF_KEY], shared with the module UI
  * ("Hidden apps" screen in Custom Settings). Toggle: `RecentHideApp` (default on).
+ *
+ * A card is hidden only when every package it holds is hidden, so hiding one
+ * half of a split pair never takes an unrelated app with it. The task the user
+ * is currently in is never filtered: Recents expects a card for it while the
+ * swipe-up gesture is running.
  */
 @LauncherModPack
 class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Provider {
 
 	@Volatile
 	private var enabled = true
+
+	/**
+	 * Local copy of the list. Every Xprefs read is a provider round trip, and
+	 * applyLoadPlan runs on the UI thread, so reads come from here and the
+	 * copy is refreshed from [onPreferenceUpdated].
+	 */
+	@Volatile
+	private var hidden: List<String> = emptyList()
 
 	private var manageButton: ImageButton? = null
 	private var overlayVisibility = View.GONE
@@ -46,14 +61,24 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 
 	override fun isEnabled(): Boolean = enabled
 
-	private fun hiddenList(): List<String> = HiddenApps.parse(Xprefs.getString(HiddenApps.PREF_KEY, ""))
-
 	private fun saveHidden(list: Collection<String>) {
-		Xprefs.edit().putString(HiddenApps.PREF_KEY, HiddenApps.join(list)).apply()
+		val value = HiddenApps.join(list)
+		hidden = HiddenApps.parse(value)
+		prefWriter.execute {
+			try {
+				Xprefs.edit().putString(HiddenApps.PREF_KEY, value).apply()
+			} catch (t: Throwable) {
+				Logger.log(RecentsTaskTools.LOG + "saving the hidden list failed", t)
+			}
+		}
+		updateManageButton()
 	}
 
 	override fun onPreferenceUpdated(vararg key: String?) {
 		enabled = Xprefs.getBoolean("RecentHideApp", true)
+		if (key.isEmpty() || key[0] == HiddenApps.PREF_KEY) {
+			hidden = HiddenApps.parse(Xprefs.getString(HiddenApps.PREF_KEY, ""))
+		}
 		TaskButtonsHost.requestRefresh()
 		updateManageButton()
 	}
@@ -61,7 +86,7 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 	override fun onPackageLoaded(PRParam: XposedModuleInterface.PackageReadyParam) {
 		TaskButtonsHost.register(this)
 
-		val recentsViewClass = ReflectedClass.of("com.android.quickstep.views.RecentsView")
+		val recentsViewClass = ReflectedClass.ofIfPossible("com.android.quickstep.views.RecentsView")
 		val recentsClazz = recentsViewClass.clazz
 		if (recentsClazz != null) {
 			// Data level filter: hidden apps never reach RecentsView.
@@ -77,13 +102,15 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 
 		val overviewActionsViewClass = ReflectedClass.ofIfPossible("com.android.quickstep.views.OverviewActionsView")
 		if (overviewActionsViewClass.clazz != null) {
-			overviewActionsViewClass.before("onFinishInflate").run { param ->
+			overviewActionsViewClass.after("onFinishInflate").run { param ->
 				try {
 					addManageButton(param.thisObject as FrameLayout)
 				} catch (t: Throwable) {
 					Logger.log(RecentsTaskTools.LOG + "manage button failed", t)
 				}
 			}
+		} else {
+			Logger.log(RecentsTaskTools.LOG + "OverviewActionsView not found, no manage button")
 		}
 	}
 
@@ -91,17 +118,20 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 
 	private fun filterLoadPlan(args: Array<Any?>) {
 		if (!enabled) return
-		val hidden = hiddenList()
-		if (hidden.isEmpty()) return
+		val hiddenNow = hidden
+		if (hiddenNow.isEmpty()) return
 
 		val index = args.indexOfFirst { it is List<*> }
 		if (index < 0) return
 		val groups = args[index] as List<*>
+		val runningTaskId = runningTaskId()
 
 		val kept = ArrayList<Any?>(groups.size)
 		for (group in groups) {
-			val packages = RecentsTaskTools.getTasksOfGroup(group).mapNotNull { RecentsTaskTools.packageOfTask(it) }
-			val hideIt = packages.isNotEmpty() && packages.all { hidden.contains(it) }
+			val tasks = RecentsTaskTools.getTasksOfGroup(group)
+			val packages = tasks.mapNotNull { RecentsTaskTools.packageOfTask(it) }
+			val isRunning = runningTaskId != null && tasks.any { RecentsTaskTools.idOfTask(it) == runningTaskId }
+			val hideIt = !isRunning && packages.isNotEmpty() && packages.all { hiddenNow.contains(it) }
 			if (!hideIt) kept.add(group)
 		}
 		if (kept.size != groups.size) {
@@ -110,21 +140,37 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 		}
 	}
 
+	/** Id of the task in the foreground, via the launcher's own ActivityManagerWrapper. */
+	private fun runningTaskId(): Int? = try {
+		val wrapperClass = XposedHelpers.findClassIfExists(
+			"com.android.systemui.shared.system.ActivityManagerWrapper",
+			mContext.classLoader,
+		)
+		val wrapper = XposedHelpers.callStaticMethod(wrapperClass, "getInstance")
+		val info = XposedHelpers.callMethod(wrapper, "getRunningTask")
+		if (info == null) null else XposedHelpers.getIntField(info, "taskId")
+	} catch (ignored: Throwable) {
+		null
+	}
+
 	// ---------------------------------------------------------------- card button
 
 	override fun onClick(taskView: ViewGroup) {
-		val packages = RecentsTaskTools.getPackageNames(taskView)
-		if (packages.isEmpty()) return
+		try {
+			val packages = RecentsTaskTools.getPackageNames(taskView)
+			if (packages.isEmpty()) return
 
-		val list = LinkedHashSet(hiddenList())
-		list.addAll(packages)
-		saveHidden(list)
+			val list = LinkedHashSet(hidden)
+			list.addAll(packages)
+			saveHidden(list)
 
-		val label = RecentsTaskTools.appLabel(mContext, packages[0])
-		Toast.makeText(mContext, RecentsTaskTools.moduleString(R.string.hide_app_toast, label), Toast.LENGTH_SHORT).show()
+			val label = packages.joinToString { RecentsTaskTools.appLabel(mContext, it) }
+			RecentsTaskTools.toast(mContext, RecentsTaskTools.moduleString(R.string.hide_app_toast, label))
 
-		RecentsTaskTools.dismissTaskView(taskView, false)
-		updateManageButton()
+			RecentsTaskTools.dismissTaskView(taskView, false)
+		} catch (t: Throwable) {
+			Logger.log(RecentsTaskTools.LOG + "hide failed", t)
+		}
 	}
 
 	override fun onRefresh(taskView: ViewGroup) {
@@ -133,19 +179,25 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 
 	// -------------------------------------------------------------- manage button
 
+	/**
+	 * Adds the "manage hidden apps" button to the overview actions bar, at the
+	 * start edge. The bar keeps its own height (ClearAllButtonMod stretches it
+	 * to the full screen when its reposition switch is on, which puts this
+	 * button mid-screen, opposite the clear-all button).
+	 */
 	private fun addManageButton(parent: FrameLayout) {
 		val ctx = parent.context
 		val button = RecentsTaskTools.createRoundButton(ctx, R.drawable.ic_manage_hidden, TaskButtonsHost.TAG_PREFIX + "manage", 10)
 		val size = RecentsTaskTools.dp(ctx, 44f)
 		val params = FrameLayout.LayoutParams(size, size)
 		params.gravity = Gravity.START or Gravity.CENTER_VERTICAL
-		params.leftMargin = RecentsTaskTools.dp(ctx, 16f)
+		params.marginStart = RecentsTaskTools.dp(ctx, 16f)
 		button.layoutParams = params
 		button.elevation = RecentsTaskTools.dp(ctx, 8f).toFloat()
+		button.contentDescription = RecentsTaskTools.moduleString(R.string.hidden_apps_title)
 		button.setOnClickListener { showManageDialog(it.context) }
 		button.visibility = View.GONE
 
-		parent.layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
 		parent.addView(button)
 		manageButton = button
 		updateManageButton()
@@ -154,39 +206,53 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 	private fun updateManageButton() {
 		val button = manageButton ?: return
 		button.post {
-			val show = enabled && hiddenList().isNotEmpty() && overlayVisibility == View.VISIBLE
-			button.visibility = if (show) View.VISIBLE else View.GONE
+			val show = enabled && hidden.isNotEmpty() && overlayVisibility == View.VISIBLE
+			val target = if (show) View.VISIBLE else View.GONE
+			if (button.visibility != target) button.visibility = target
 		}
 	}
 
 	private fun showManageDialog(context: Context) {
-		val hidden = hiddenList()
-		if (hidden.isEmpty()) {
-			Toast.makeText(context, RecentsTaskTools.moduleString(R.string.hidden_apps_empty), Toast.LENGTH_SHORT).show()
-			return
-		}
-		val labels = hidden.map { RecentsTaskTools.appLabel(context, it) }.toTypedArray<CharSequence>()
+		try {
+			val hiddenNow = hidden
+			if (hiddenNow.isEmpty()) {
+				RecentsTaskTools.toast(mContext, RecentsTaskTools.moduleString(R.string.hidden_apps_empty))
+				return
+			}
+			val labels = hiddenNow.map { RecentsTaskTools.appLabel(context, it) }.toTypedArray<CharSequence>()
 
-		val builder = AlertDialog.Builder(context)
-		builder.setTitle(RecentsTaskTools.moduleString(R.string.hidden_apps_dialog_title))
-		builder.setItems(labels) { dialog, which ->
-			val remaining = hiddenList().filter { it != hidden[which] }
-			saveHidden(remaining)
-			Toast.makeText(
-				context,
-				RecentsTaskTools.moduleString(R.string.hidden_apps_unhidden_toast, labels[which]),
-				Toast.LENGTH_LONG,
-			).show()
-			dialog.dismiss()
-			updateManageButton()
+			val theme = if (SystemUtils.isDarkMode()) {
+				android.R.style.Theme_DeviceDefault_Dialog_Alert
+			} else {
+				android.R.style.Theme_DeviceDefault_Light_Dialog_Alert
+			}
+
+			// setItems wires the list itself; the old build reached for
+			// getListView() before show(), which throws.
+			AlertDialog.Builder(context, theme)
+				.setTitle(RecentsTaskTools.moduleString(R.string.hidden_apps_dialog_title))
+				.setItems(labels) { dialog, which ->
+					saveHidden(hidden.filter { it != hiddenNow[which] })
+					RecentsTaskTools.toast(
+						mContext,
+						RecentsTaskTools.moduleString(R.string.hidden_apps_unhidden_toast, labels[which]),
+					)
+					dialog.dismiss()
+				}
+				.setNeutralButton(RecentsTaskTools.moduleString(R.string.hidden_apps_show_all)) { dialog, _ ->
+					saveHidden(emptyList())
+					RecentsTaskTools.toast(mContext, RecentsTaskTools.moduleString(R.string.hidden_apps_all_unhidden_toast))
+					dialog.dismiss()
+				}
+				.setNegativeButton(android.R.string.cancel, null)
+				.show()
+		} catch (t: Throwable) {
+			Logger.log(RecentsTaskTools.LOG + "manage dialog failed", t)
 		}
-		builder.setNeutralButton(RecentsTaskTools.moduleString(R.string.hidden_apps_show_all)) { dialog, _ ->
-			saveHidden(emptyList())
-			Toast.makeText(context, RecentsTaskTools.moduleString(R.string.hidden_apps_all_unhidden_toast), Toast.LENGTH_LONG).show()
-			dialog.dismiss()
-			updateManageButton()
-		}
-		builder.setNegativeButton(android.R.string.cancel, null)
-		builder.show()
+	}
+
+	companion object {
+		/** One background thread for the provider writes, so they keep their order. */
+		private val prefWriter = Executors.newSingleThreadExecutor()
 	}
 }

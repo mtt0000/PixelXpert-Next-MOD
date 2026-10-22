@@ -578,7 +578,7 @@
     <string name="clipboard_share_nothing">Nessun contenuto da copiare</string>
     <string name="clipboard_share_failed">Impossibile accedere agli appunti</string>
     <string name="clear_all_legacy_style_title">Pulsante \"Cancella tutto\" rotondo</string>
-    <string name="clear_all_legacy_style_summary">Pulsante nero rotondo invece della sola icona. Funziona insieme a \"Riposiziona cancella tutto\" in Diverse. Riavvia il launcher.</string>
+    <string name="clear_all_legacy_style_summary">Pulsante nero rotondo invece della sola icona. Richiede il pulsante cancella tutto in Varie &gt; Opzioni Launcher. Riavvia il launcher.</string>
     <string name="kill_app_title">Pulsante chiudi app</string>
     <string name="kill_app_summary">Aggiunge su ogni scheda dei Recenti un pulsante che forza l\'arresto dell\'app e rimuove la scheda</string>
     <string name="hide_app_title">Pulsante nascondi app</string>
@@ -591,6 +591,7 @@
     <string name="hidden_apps_unhide">Mostra</string>
     <string name="hidden_apps_add">Nascondi un\'app</string>
     <string name="hidden_apps_add_title">Scegli l\'app da nascondere</string>
+    <string name="kill_app_toast">Terminata: %1$s</string>
     <string name="hide_app_toast">%1$s nascosta dai Recenti</string>
     <string name="hidden_apps_unhidden_toast">%1$s riapparirà alla prossima apertura dei Recenti</string>
     <string name="hidden_apps_all_unhidden_toast">Tutte le app riappariranno alla prossima apertura dei Recenti</string>

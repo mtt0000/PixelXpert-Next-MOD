@@ -645,7 +645,7 @@
     <string name="clipboard_share_nothing">No content found to copy</string>
     <string name="clipboard_share_failed">Failed to get clipboard service</string>
     <string name="clear_all_legacy_style_title">Round \"Clear all\" button</string>
-    <string name="clear_all_legacy_style_summary">Round black button instead of the plain icon. Works together with \"Reposition clear all\" in Miscellaneous. Restarts the launcher.</string>
+    <string name="clear_all_legacy_style_summary">Round black button instead of the plain icon. Needs the clear-all button from Miscellaneous &gt; Launcher options. Restarts the launcher.</string>
     <string name="kill_app_title">Kill app button</string>
     <string name="kill_app_summary">Adds a button on every Recents card that force-stops the app and removes the card</string>
     <string name="hide_app_title">Hide app button</string>
@@ -658,6 +658,7 @@
     <string name="hidden_apps_unhide">Show</string>
     <string name="hidden_apps_add">Hide an app</string>
     <string name="hidden_apps_add_title">Choose the app to hide</string>
+    <string name="kill_app_toast">Stopped: %1$s</string>
     <string name="hide_app_toast">%1$s hidden from Recents</string>
     <string name="hidden_apps_unhidden_toast">%1$s will reappear the next time Recents opens</string>
     <string name="hidden_apps_all_unhidden_toast">All apps will reappear the next time Recents opens</string>

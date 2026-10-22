@@ -8,7 +8,9 @@ import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageButton
+import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import de.robv.android.xposed.XposedHelpers
 import java.lang.reflect.Method
@@ -55,6 +57,25 @@ object RecentsTaskTools {
 	} catch (ignored: Throwable) {
 		packageName
 	}
+
+	/** Toast from a hook; safe to call from any thread. */
+	@JvmStatic
+	fun toast(context: Context, text: String) {
+		if (text.isEmpty()) return
+		android.os.Handler(android.os.Looper.getMainLooper()).post {
+			try {
+				Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+			} catch (ignored: Throwable) {
+			}
+		}
+	}
+
+	/** Packages a Recents button must never force-stop. */
+	@JvmStatic
+	fun isProtectedPackage(packageName: String): Boolean =
+		packageName == Constants.LAUNCHER_PACKAGE ||
+			packageName == Constants.SYSTEM_UI_PACKAGE ||
+			packageName == Constants.SYSTEM_FRAMEWORK_PACKAGE
 
 	private inline fun <T> attempt(block: () -> T?): T? = try {
 		block()
@@ -280,13 +301,11 @@ object RecentsTaskTools {
 	 */
 	@JvmStatic
 	fun forceStop(context: Context, packageName: String) {
-		if (packageName == Constants.LAUNCHER_PACKAGE ||
-			packageName == Constants.SYSTEM_UI_PACKAGE ||
-			packageName == Constants.SYSTEM_FRAMEWORK_PACKAGE
-		) {
+		if (isProtectedPackage(packageName)) return
+		if (!SAFE_PACKAGE.matches(packageName)) {
+			Logger.log(LOG + "refusing to force-stop odd package name: $packageName")
 			return
 		}
-		if (!SAFE_PACKAGE.matches(packageName)) return
 
 		Thread {
 			var done = false
@@ -295,6 +314,7 @@ object RecentsTaskTools {
 				val method = am.javaClass.getMethod("forceStopPackage", String::class.java)
 				method.invoke(am, packageName)
 				done = true
+				Logger.log(LOG + "force-stopped $packageName via ActivityManager")
 			} catch (t: Throwable) {
 				Logger.log(LOG + "forceStopPackage($packageName) failed: " + (t.cause ?: t))
 			}
@@ -302,6 +322,7 @@ object RecentsTaskTools {
 			if (!done) {
 				XPLauncher.enqueueProxyCommand { proxy ->
 					proxy.runRootCommand("am force-stop $packageName")
+					Logger.log(LOG + "force-stopped $packageName via root proxy")
 				}
 			}
 		}.start()
@@ -358,6 +379,40 @@ object RecentsTaskTools {
 		}
 	}
 
+	/**
+	 * Performs the dismiss action the card advertises to accessibility.
+	 *
+	 * Launcher3's TaskView registers its close action under the id of its own
+	 * `accessibility_close` string (`accessibility_close_task` on older
+	 * builds) rather than [AccessibilityNodeInfo.ACTION_DISMISS], so the
+	 * launcher ids are looked up and only an action the node really lists is
+	 * performed. The generic ACTION_DISMISS is tried last.
+	 */
+	private fun dismissViaAccessibility(taskView: View): Boolean {
+		try {
+			val res = taskView.resources
+			val pkg = taskView.context.packageName
+			val ids = arrayOf("accessibility_close", "accessibility_close_task")
+				.map { res.getIdentifier(it, "string", pkg) }
+				.filter { it != 0 } + AccessibilityNodeInfo.ACTION_DISMISS
+
+			val node = taskView.createAccessibilityNodeInfo()
+			val offered = node.actionList.map { it.id }.toSet()
+
+			for (id in ids) {
+				if (id !in offered) continue
+				if (taskView.performAccessibilityAction(id, null)) {
+					Logger.log(LOG + "dismissed via accessibility action 0x" + Integer.toHexString(id))
+					return true
+				}
+			}
+			Logger.log(LOG + "no accessibility dismiss action on " + taskView.javaClass.name)
+		} catch (t: Throwable) {
+			Logger.log(LOG + "accessibility dismiss failed: " + t)
+		}
+		return false
+	}
+
 	/** Last resort when the launcher offers no dismiss method we can call. */
 	private fun animateAway(taskView: ViewGroup) {
 		try {
@@ -395,6 +450,11 @@ object RecentsTaskTools {
 	 */
 	@JvmStatic
 	fun dismissTaskView(taskView: ViewGroup, removeTask: Boolean): Boolean {
+		// The card's own "close" accessibility action runs the launcher's
+		// swipe-up path (dismiss + remove task), so it is the first choice
+		// whenever the task should go.
+		if (removeTask && dismissViaAccessibility(taskView)) return true
+
 		val recents = findRecentsView(taskView)
 		val ids = getTaskIds(taskView)
 		var dismissed = false

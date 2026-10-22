@@ -268,6 +268,21 @@ object TaskButtonsHost {
 		return rect.contains(x.toInt(), y.toInt())
 	}
 
+	/**
+	 * True when [view] or an ancestor is (almost) transparent: Recents can sit
+	 * VISIBLE at alpha 0 behind the home screen, and a tap there must not land
+	 * on an invisible button.
+	 */
+	private fun isFadedOut(view: View): Boolean {
+		var alpha = 1f
+		var current: View? = view
+		while (current != null) {
+			alpha *= current.alpha
+			current = current.parent as? View
+		}
+		return alpha < 0.1f
+	}
+
 	private fun findButtonAt(x: Float, y: Float): Hit? {
 		val all = synchronized(refreshers) { refreshers.keys.toList() }
 		for (recentsView in all) {
@@ -276,7 +291,7 @@ object TaskButtonsHost {
 				for (provider in providers) {
 					if (!provider.isEnabled()) continue
 					val button = taskView.findViewWithTag<View>(provider.tag) ?: continue
-					if (button.visibility != View.VISIBLE || !button.isShown) continue
+					if (button.visibility != View.VISIBLE || !button.isShown || isFadedOut(button)) continue
 					if (contains(button, x, y)) return Hit(button, provider, taskView)
 				}
 			}

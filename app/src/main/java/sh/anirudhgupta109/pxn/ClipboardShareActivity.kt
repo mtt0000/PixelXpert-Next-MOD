@@ -35,16 +35,15 @@ class ClipboardShareActivity : Activity() {
 		finish()
 	}
 
-	@Suppress("DEPRECATION")
 	private fun streamUris(intent: Intent): List<Uri> {
 		val out = ArrayList<Uri>()
 		try {
-			val single = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+			val single = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
 			if (single != null) out.add(single)
 		} catch (ignored: Throwable) {
 		}
 		try {
-			val many = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+			val many = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
 			if (many != null) out.addAll(many.filterNotNull())
 		} catch (ignored: Throwable) {
 		}
@@ -104,16 +103,16 @@ class ClipboardShareActivity : Activity() {
 
 	private fun copyToClipboard(content: String) {
 		if (content.isEmpty()) {
-			Toast.makeText(this, R.string.clipboard_share_nothing, Toast.LENGTH_SHORT).show()
+			Toast.makeText(applicationContext, R.string.clipboard_share_nothing, Toast.LENGTH_SHORT).show()
 			return
 		}
 
 		val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
 		if (clipboard != null) {
 			clipboard.setPrimaryClip(ClipData.newPlainText("Copied Content", content))
-			Toast.makeText(this, R.string.clipboard_share_done, Toast.LENGTH_SHORT).show()
+			Toast.makeText(applicationContext, R.string.clipboard_share_done, Toast.LENGTH_SHORT).show()
 		} else {
-			Toast.makeText(this, R.string.clipboard_share_failed, Toast.LENGTH_SHORT).show()
+			Toast.makeText(applicationContext, R.string.clipboard_share_failed, Toast.LENGTH_SHORT).show()
 		}
 	}
 

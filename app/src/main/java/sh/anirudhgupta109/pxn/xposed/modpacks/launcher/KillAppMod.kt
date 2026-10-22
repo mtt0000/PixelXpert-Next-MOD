@@ -9,6 +9,7 @@ import sh.anirudhgupta109.pxn.xposed.XposedModPack
 import sh.anirudhgupta109.pxn.xposed.annotations.LauncherModPack
 import sh.anirudhgupta109.pxn.xposed.utils.RecentsTaskTools
 import sh.anirudhgupta109.pxn.xposed.utils.TaskButtonsHost
+import sh.anirudhgupta109.pxn.xposed.utils.toolkit.Logger
 
 /**
  * Adds a "kill app" button to every card of the Recents screen.
@@ -39,9 +40,21 @@ class KillAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 	}
 
 	override fun onClick(taskView: ViewGroup) {
-		val packages = RecentsTaskTools.getPackageNames(taskView)
-		for (pkg in packages) RecentsTaskTools.forceStop(mContext, pkg)
-		RecentsTaskTools.dismissTaskView(taskView, true)
+		try {
+			val packages = RecentsTaskTools.getPackageNames(taskView)
+				.filterNot { RecentsTaskTools.isProtectedPackage(it) }
+			for (pkg in packages) RecentsTaskTools.forceStop(mContext, pkg)
+
+			if (packages.isNotEmpty()) {
+				val labels = packages.joinToString { RecentsTaskTools.appLabel(mContext, it) }
+				RecentsTaskTools.toast(mContext, RecentsTaskTools.moduleString(R.string.kill_app_toast, labels))
+			}
+
+			// Even with no package resolved the card still goes, as a swipe-up would.
+			RecentsTaskTools.dismissTaskView(taskView, true)
+		} catch (t: Throwable) {
+			Logger.log(RecentsTaskTools.LOG + "kill failed", t)
+		}
 	}
 
 	override fun onRefresh(taskView: ViewGroup) {

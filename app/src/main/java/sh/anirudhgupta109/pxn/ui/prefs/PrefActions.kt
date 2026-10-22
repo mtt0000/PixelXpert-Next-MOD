@@ -111,12 +111,14 @@ private fun Context.findActivity(): Activity? = when (this) {
  */
 internal fun setClipboardShareEnabled(context: Context, enabled: Boolean) {
 	try {
-		context.packageManager.setComponentEnabledSetting(
-			ComponentName(context, ClipboardShareActivity::class.java),
-			if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-			else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-			PackageManager.DONT_KILL_APP,
-		)
+		val component = ComponentName(context, ClipboardShareActivity::class.java)
+		val pm = context.packageManager
+		val wanted = if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+		else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+		// Called on every app start, so an unchanged state is not rewritten.
+		if (pm.getComponentEnabledSetting(component) != wanted) {
+			pm.setComponentEnabledSetting(component, wanted, PackageManager.DONT_KILL_APP)
+		}
 	} catch (ignored: Exception) {
 	}
 }
