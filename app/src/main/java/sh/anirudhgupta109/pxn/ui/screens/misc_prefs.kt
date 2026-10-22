@@ -52,7 +52,6 @@ val misc_prefs: PrefScreen = PrefScreen(
 	title = R.string.work_clone_profile_header,
 	ignore = true,
 	children = listOf(
-				SwitchPref(key = "StatusbarLongpressAppSwitch", title = R.string.statusbar_long_press_app_switch, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				SwitchPref(key = "StatusbarAppSwitchIconEnabled", title = R.string.statusbar_app_switch_icon, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 	),
 			),
@@ -62,9 +61,6 @@ val misc_prefs: PrefScreen = PrefScreen(
 	children = listOf(
 				TextPref(key = "NotificationAODIconLimit", title = R.string.sb_notification_limit),
 				SwitchPref(key = "fingerprintWhileDozing", title = R.string.so_fingerprint_sensor_enabled, default = "true"),
-				SwitchPref(key = "doubleTapToWake", title = R.string.so_double_tap_wake_title, summary = R.string.so_double_tap_wake_summary, default = "false"),
-				SwitchPref(key = "TapToShowAmbient", title = R.string.so_tap_to_show_ambient_title, summary = R.string.so_tap_to_show_ambient_summary, default = "false"),
-				SwitchPref(key = "PickToShowAmbient", title = R.string.so_pick_to_show_ambient_title, summary = R.string.so_pick_to_show_ambient_summary, default = "false"),
 				SwitchPref(key = "ForceAODwCharging", title = R.string.force_aod_while_charging_title, summary = R.string.force_aod_while_charging_summary, default = "false"),
 	),
 			),

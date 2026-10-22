@@ -40,6 +40,10 @@ private val GESTURE_NAV_KEYS = setOf(
 	"twoFingerSwipeUpAction", "twoFingerSwipeUpActionLabel", "swipeUpPercentage",
 	"navPillColorAccent", "GesPillWidthModPos", "GesPillHeightFactor",
 	"KeyboardSpaceHideButtons", "HideNavbarInsets",
+	"QSPullodwnEnabled", "QSPulldownPercent", "QSPulldownSide", "oneFingerPullupEnabled",
+	"DoubleTapSleep", "StatusbarLongpressAppSwitch",
+	"DoubleTapSleepLockscreen", "holdScreenTorchEnabled",
+	"doubleTapToWake", "TapToShowAmbient", "PickToShowAmbient",
 )
 
 /** Whether [key] is one of the settings a gesture backup carries. */

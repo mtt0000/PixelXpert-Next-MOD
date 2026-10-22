@@ -10,6 +10,8 @@ val preferenceScreens: Map<String, PrefScreen> = mapOf(
 			"edge_left_prefs" to edge_left_prefs,
 			"edge_right_prefs" to edge_right_prefs,
 			"gesture_nav_prefs" to gesture_nav_prefs,
+			"gesture_screen_prefs" to gesture_screen_prefs,
+			"gesture_statusbar_prefs" to gesture_statusbar_prefs,
 			"header_preferences" to header_preferences,
 			"hotspot_prefs" to hotspot_prefs,
 			"lock_screen_prefs" to lock_screen_prefs,

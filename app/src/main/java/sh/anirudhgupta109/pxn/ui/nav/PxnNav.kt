@@ -451,11 +451,12 @@ fun PxnNav(startRoute: Route? = null) {
 					),
 				)
 
-				// The reach belongs to the quick settings screen only, so it
-				// is drawn only while that screen is on top.
-				val onQuickSettings =
-					(backStack.lastOrNull() as? Route.Pref)?.screenKey == "quicksettings_prefs"
-				if (onQuickSettings) PullDownIndicator(store)
+				// The reach belongs to the status bar gestures screen, where
+				// the pull-down lives, so it is drawn only while that screen
+				// is on top.
+				val onPullDown =
+					(backStack.lastOrNull() as? Route.Pref)?.screenKey == "gesture_statusbar_prefs"
+				if (onPullDown) PullDownIndicator(store)
 			}
 		},
 		bottomBar = {

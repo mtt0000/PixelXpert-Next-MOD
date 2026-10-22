@@ -67,5 +67,18 @@ val edge_bottom_prefs: PrefScreen = PrefScreen(
 				ActionPref(key = "EdgeBottomLongSwipeDiagDown", title = R.string.edge_gesture_long_diag_right, default = "-1", dependency = "EdgeGesturesEnabled", icon = R.drawable.ic_gesture_bottom_long_diag_down),
 	),
 			),
+			Category(
+	title = R.string.gesture_nav_extra_cat,
+	ignore = true,
+	children = listOf(
+				SwitchPref(key = "FCLongSwipeEnabled", title = R.string.gesture_nav_long_swipe_fc_title, default = "false", icon = R.drawable.ic_gesture_bottom_long_in, summaryOn = R.string.general_on, summaryOff = R.string.general_off),
+				ActionPref(key = "leftSwipeUpAction", title = R.string.gesture_nav_left_swipe_up_title, default = "-1", icon = R.drawable.ic_gesture_bottom_in),
+				SliderPref(key = "leftSwipeUpPercentage", title = R.string.gesture_nav_left_swipe_up_percent, default = "25", min = 5f, max = 40f, step = 1f, valueCount = 1),
+				ActionPref(key = "rightSwipeUpAction", title = R.string.gesture_nav_right_swipe_up_title, default = "-1", icon = R.drawable.ic_gesture_bottom_in),
+				SliderPref(key = "rightSwipeUpPercentage", title = R.string.gesture_nav_right_swipe_up_percent, default = "25", min = 5f, max = 40f, step = 1f, valueCount = 1),
+				ActionPref(key = "twoFingerSwipeUpAction", title = R.string.gesture_nav_two_finger_title, default = "-1", icon = R.drawable.ic_gesture_bottom_in),
+				SliderPref(key = "swipeUpPercentage", title = R.string.gesture_nav_swipe_up_height, default = "20", min = 5f, max = 50f, step = 5f, valueCount = 1),
+	),
+			),
 	),
 )

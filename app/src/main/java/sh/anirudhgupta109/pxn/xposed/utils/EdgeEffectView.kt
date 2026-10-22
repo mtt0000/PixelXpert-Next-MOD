@@ -126,8 +126,12 @@ class EdgeEffectView(context: Context, val side: Int) : View(context) {
 		this.downY = downY
 		this.x = x
 		this.y = y
-		this.label = label
-		this.icon = icon
+		// While a value is being adjusted the level label stays: the finger
+		// keeps reporting no gesture, which would otherwise clear it.
+		if (level < 0f) {
+			this.label = label
+			this.icon = icon
+		}
 		crest = (pull() / PULL_FACTOR).coerceIn(0f, waveHeight)
 		invalidate()
 	}
@@ -290,26 +294,38 @@ class EdgeEffectView(context: Context, val side: Int) : View(context) {
 	}
 
 	private fun drawLabel(canvas: Canvas, text: String, badgeLeft: Float, badgeTop: Float, badgeSize: Float, besideBadge: Boolean) {
+		val adjusting = level >= 0f
+		// The level reads bigger and follows the finger, so the percentage
+		// stays next to the thumb while it slides.
+		labelPaint.textSize = (if (adjusting) 18 else 14) * density
+		labelPaint.isFakeBoldText = adjusting
 		val padding = 10 * density
 		val textWidth = labelPaint.measureText(text)
-		val barWidth = if (level >= 0f) 64 * density else 0f
+		val barWidth = if (adjusting) 64 * density else 0f
 		val boxWidth = textWidth + padding * 2 + barWidth
 		val boxHeight = labelPaint.textSize + padding * 2
-		val gap = 8 * density + if (besideBadge) badgeSize else crest
+		val gap = (if (adjusting) 16 else 8) * density + if (besideBadge) badgeSize else crest
+
+		getLocationOnScreen(location)
+		val centerAlong = if (adjusting) {
+			if (side == SIDE_BOTTOM) x - location[0] else y - location[1]
+		} else {
+			if (side == SIDE_BOTTOM) badgeLeft + badgeSize / 2 else badgeTop + badgeSize / 2
+		}
 
 		var left: Float
 		var top: Float
 		when (side) {
 			SIDE_LEFT -> {
 				left = gap
-				top = badgeTop + badgeSize / 2 - boxHeight / 2
+				top = centerAlong - boxHeight / 2
 			}
 			SIDE_RIGHT -> {
 				left = width - gap - boxWidth
-				top = badgeTop + badgeSize / 2 - boxHeight / 2
+				top = centerAlong - boxHeight / 2
 			}
 			else -> {
-				left = badgeLeft + badgeSize / 2 - boxWidth / 2
+				left = centerAlong - boxWidth / 2
 				top = height - gap - boxHeight
 			}
 		}

@@ -12,7 +12,6 @@ val statusbar_settings: PrefScreen = PrefScreen(
 	title = R.string.statusbar_general_options,
 	ignore = true,
 	children = listOf(
-				SwitchPref(key = "DoubleTapSleep", title = R.string.double_tap_sleep_title, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				NavRow(key = "sbc_header", title = R.string.sbc_header, route = "sbc"),
 				NavRow(key = "sbbb_header", title = R.string.sbbb_header, route = "sbb"),
 				SliderPref(key = "statusbarHeightFactor", title = R.string.status_bar_height, default = "100", min = 50f, max = 200f, continuous = true),

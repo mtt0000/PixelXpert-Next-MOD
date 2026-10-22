@@ -780,4 +780,11 @@
     <string name="edge_side_nav_summary">Gesti, tira e scorri e gesto Indietro di sistema</string>
     <string name="edge_bottom_nav_summary">Gesti e tira e scorri</string>
     <string name="back_gesture_on_edge_title">Gesto Indietro di sistema su questo bordo</string>
+    <string name="qs_brightness_category">Cursore della luminosità</string>
+    <string name="gestures_moved_summary">Spostato in Barra di navigazione > Gesti > Barra di stato</string>
+    <string name="other_gestures_cat">Altri gesti</string>
+    <string name="gesture_statusbar_title">Barra di stato</string>
+    <string name="gesture_statusbar_summary">Apertura e chiusura delle impostazioni rapide, doppio tocco per spegnere, pressione prolungata</string>
+    <string name="gesture_screen_title">Schermata di blocco e schermo spento</string>
+    <string name="gesture_screen_summary">Doppio tocco per spegnere o riattivare, torcia, display ambient</string>
 </resources>

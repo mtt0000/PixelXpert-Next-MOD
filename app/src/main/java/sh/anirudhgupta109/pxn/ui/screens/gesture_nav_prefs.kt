@@ -21,16 +21,11 @@ val gesture_nav_prefs: PrefScreen = PrefScreen(
 	),
 			),
 			Category(
-	title = R.string.gesture_nav_extra_cat,
+	title = R.string.other_gestures_cat,
 	ignore = true,
 	children = listOf(
-				SwitchPref(key = "FCLongSwipeEnabled", title = R.string.gesture_nav_long_swipe_fc_title, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
-				ActionPref(key = "leftSwipeUpAction", title = R.string.gesture_nav_left_swipe_up_title, default = "-1", icon = R.drawable.ic_gesture_bottom_in),
-				SliderPref(key = "leftSwipeUpPercentage", title = R.string.gesture_nav_left_swipe_up_percent, default = "25", min = 5f, max = 40f, step = 1f, valueCount = 1),
-				ActionPref(key = "rightSwipeUpAction", title = R.string.gesture_nav_right_swipe_up_title, default = "-1", icon = R.drawable.ic_gesture_bottom_in),
-				SliderPref(key = "rightSwipeUpPercentage", title = R.string.gesture_nav_right_swipe_up_percent, default = "25", min = 5f, max = 40f, step = 1f, valueCount = 1),
-				ActionPref(key = "twoFingerSwipeUpAction", title = R.string.gesture_nav_two_finger_title, default = "-1", icon = R.drawable.ic_gesture_bottom_in),
-				SliderPref(key = "swipeUpPercentage", title = R.string.gesture_nav_swipe_up_height, default = "20", min = 5f, max = 50f, step = 5f, valueCount = 1),
+				NavRow(key = "gesture_statusbar", title = R.string.gesture_statusbar_title, summary = R.string.gesture_statusbar_summary, route = "gesture_statusbar", icon = R.drawable.ic_gesture_top_in),
+				NavRow(key = "gesture_screen", title = R.string.gesture_screen_title, summary = R.string.gesture_screen_summary, route = "gesture_screen", icon = R.drawable.ic_gesture_screen_double_tap),
 	),
 			),
 			Category(

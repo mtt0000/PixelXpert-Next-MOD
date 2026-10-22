@@ -211,8 +211,8 @@ private fun List<FlattenedNode>.toBlocks(): List<PrefBlock> {
  * (`QSPulldownPercent`) and it clings to the edge the gesture starts from
  * (`QSPulldownSide`), so the setting reads as a shape rather than as a bare
  * number. It appears only while `QSPullodwnEnabled` holds - the same condition
- * `visibleBy` applies to the rows beneath it - and only over the quick
- * settings screen.
+ * `visibleBy` applies to the rows beneath it - and only over the status bar
+ * gestures screen.
  *
  * The strip sits over the top bar rather than over the list: it is a mark on
  * the window's edge, not a row of the settings screen, and overlaying the

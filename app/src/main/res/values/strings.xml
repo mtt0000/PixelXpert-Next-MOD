@@ -847,4 +847,11 @@
     <string name="edge_side_nav_summary">Gestures, pull and slide and the system back gesture</string>
     <string name="edge_bottom_nav_summary">Gestures and pull and slide</string>
     <string name="back_gesture_on_edge_title">System back gesture on this edge</string>
+    <string name="qs_brightness_category">Brightness slider</string>
+    <string name="gestures_moved_summary">Moved to Navigation bar > Gestures > Status bar</string>
+    <string name="other_gestures_cat">Other gestures</string>
+    <string name="gesture_statusbar_title">Status bar</string>
+    <string name="gesture_statusbar_summary">Quick settings pull-down and pull-up, double tap to sleep, long press</string>
+    <string name="gesture_screen_title">Lock screen and screen off</string>
+    <string name="gesture_screen_summary">Double tap to sleep or wake, torch, ambient display</string>
 </resources>
