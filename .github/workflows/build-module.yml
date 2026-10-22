@@ -3,8 +3,8 @@ name: Build KernelSU module
 # Builds the release APK and the flashable PixelXpert-Next.zip (Magisk module
 # format, flashable from KernelSU / Magisk / APatch managers) and publishes
 # both as workflow artifacts. Needs no secrets: without SIGNING_KEY the APK is
-# signed with a CI debug key that is cached between runs, so consecutive
-# builds can update each other.
+# signed with a CI key that is cached between runs, so consecutive builds can
+# update each other.
 
 on:
   push:
@@ -26,6 +26,9 @@ jobs:
 
     permissions:
       contents: read
+
+    env:
+      HAS_SIGNING_KEY: ${{ secrets.SIGNING_KEY != '' }}
 
     steps:
     - name: Source Code Download
@@ -60,6 +63,16 @@ jobs:
         echo "Installed platform: ${installed:-none, left to AGP}"
         "$SDKM" --list_installed 2>/dev/null | grep -E "platforms;|build-tools;" || true
 
+    # Without a release key the build is signed with a CI key generated once
+    # and kept in the Actions cache, so consecutive zips carry the same
+    # signature and a new one updates the app installed by an older one.
+    - name: Restore CI signing key
+      if: env.HAS_SIGNING_KEY != 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.pxn-ci/ci-release.jks
+        key: pxn-ci-signing-key-v1
+
     - name: Signing setup
       env:
         SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
@@ -75,20 +88,25 @@ jobs:
             echo "keyPassword=$KEY_PASSWORD"
             echo "storeFile=$GITHUB_WORKSPACE/ReleaseKey.jks"
           } > ReleaseKey.properties
-          echo "SIGNING=release key" >> "$GITHUB_ENV"
+          echo "SIGNING=release key (SIGNING_KEY secret)" >> "$GITHUB_ENV"
         else
-          echo "SIGNING=CI debug key (no SIGNING_KEY secret)" >> "$GITHUB_ENV"
+          KS="$HOME/.pxn-ci/ci-release.jks"
+          if [ ! -f "$KS" ]; then
+            mkdir -p "$(dirname "$KS")"
+            keytool -genkeypair -keystore "$KS" -storetype PKCS12 \
+              -alias pxn-ci -keyalg RSA -keysize 4096 -validity 36500 \
+              -storepass pxn-ci-key -keypass pxn-ci-key \
+              -dname "CN=PixelXpert-Next MOD CI"
+            echo "Generated a new CI signing key"
+          fi
+          {
+            echo "storePassword=pxn-ci-key"
+            echo "keyAlias=pxn-ci"
+            echo "keyPassword=pxn-ci-key"
+            echo "storeFile=$KS"
+          } > ReleaseKey.properties
+          echo "SIGNING=CI key from the Actions cache (no SIGNING_KEY secret)" >> "$GITHUB_ENV"
         fi
-
-    # Without a release key, app/build.gradle.kts signs release with the debug
-    # config. Keeping ~/.android/debug.keystore across runs keeps the
-    # signature stable, so a new zip updates the app installed by an old one.
-    - name: Restore CI debug keystore
-      if: env.SIGNING != 'release key'
-      uses: actions/cache@v4
-      with:
-        path: ~/.android/debug.keystore
-        key: pxn-ci-debug-keystore-v1
 
     - name: Gradle Build
       run: |
