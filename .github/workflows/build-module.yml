@@ -43,7 +43,9 @@ jobs:
       uses: actions/setup-java@v5.2.0
       with:
         java-version: '21'
-        distribution: 'jetbrains'
+        # temurin resolves through the Adoptium API; the jetbrains distribution
+        # queries the GitHub API anonymously and fails on its rate limit.
+        distribution: 'temurin'
         cache: gradle
 
     - name: Android SDK packages
