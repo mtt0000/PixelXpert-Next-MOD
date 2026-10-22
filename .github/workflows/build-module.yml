@@ -1,11 +1,11 @@
 name: Build KernelSU module
 
-# The only build workflow of this fork. On every commit to any branch (and on
-# manual runs) it builds the release APK and the flashable
-# PixelXpert-Next.zip (Magisk module format: KernelSU / KernelSU Next /
-# Magisk / APatch), then replaces that branch's GitHub release with a single
-# one for the latest commit carrying the zip. Flashing the zip also installs
-# the APK (MagiskModBase/customize.sh).
+# The only workflow of this fork. On every commit to any branch (and on manual
+# runs) it builds the release APK and the flashable PixelXpert-Next.zip
+# (Magisk module format: KernelSU / KernelSU Next / Magisk / APatch), then
+# deletes that branch's old release and publishes a single one for the latest
+# commit carrying the zip and the APK. Flashing the zip also installs the APK
+# (MagiskModBase/customize.sh).
 #
 # Needs no secrets: without SIGNING_KEY the APK is signed with a CI key that
 # is cached between runs, so consecutive builds can update each other.
@@ -232,6 +232,8 @@ jobs:
           echo ""
           echo "Module version: \`$VERSION\`. Signing: $SIGNING."
           echo ""
+          echo "PixelXpert-Next.apk is the same app the zip installs, for installing or updating it on its own."
+          echo ""
           echo "Install: KernelSU Next (or KernelSU / Magisk / APatch) > Modules > Install from storage > PixelXpert-Next.zip, then reboot. Flashing also installs the PixelXpert-Next app; if that fails the module retries at boot."
         } > release-notes.md
 
@@ -240,7 +242,7 @@ jobs:
           PRERELEASE="--prerelease"
         fi
 
-        gh release create "$TAG" output/PixelXpert-Next.zip \
+        gh release create "$TAG" output/PixelXpert-Next.zip app/build/outputs/apk/release/PixelXpert-Next.apk \
           --target "$GITHUB_SHA" \
           --title "PixelXpert-Next $VERSION ($BRANCH @ $SHORT_SHA)" \
           --notes-file release-notes.md \
