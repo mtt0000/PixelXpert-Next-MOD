@@ -65,8 +65,8 @@ import sh.anirudhgupta109.pxn.xposed.utils.toolkit.Logger
  *     here sits behind `BuildConfig.DEBUG`, so nothing observable changes.
  *  2. The Java `Xprefs` static import becomes an import of the property from
  *     the `XPrefs` Kotlin object - same value, Kotlin cannot import a field.
- *  3. [doubleToggleDarkMode] substitutes [threadSleep] for
- *     `Thread.currentThread().wait(100)`; see the comment there.
+ *  3. [doubleToggleDarkMode] runs as one root script that reads and
+ *     restores the exact night mode; see the comment there.
  *
  * Functional calls (`invokeOriginalMethod`, `callMethod`,
  * `getStaticObjectField`) stay on the Xposed legacy API verbatim:
@@ -717,9 +717,6 @@ class SystemUtils(context: Context) {
 		@Volatile
 		internal var isInternalTorchCall = false
 
-		@Volatile
-		internal var darkSwitching = false
-
 		@JvmStatic
 		fun restart(what: String) {
 			when (what.lowercase()) {
@@ -799,41 +796,38 @@ class SystemUtils(context: Context) {
 
 		@JvmStatic
 		fun doubleToggleDarkMode() {
-			XPLauncher.enqueueProxyCommand { proxy ->
-				val isDark = isDarkMode()
-				Thread {
+			// Flips the night mode and puts it back, to push the hooked UI
+			// through a configuration change. Done in one root script so it
+			// cannot leave the theme flipped:
+			//  - the mode to come back to is read from `cmd uimode night`
+			//    when the script runs, not from this process's configuration
+			//    beforehand, which a flip still in progress has already
+			//    changed;
+			//  - it is the mode itself (yes, no, auto, custom_schedule,
+			//    custom_bedtime), so a scheduled dark theme keeps its
+			//    schedule instead of being pinned to yes or no;
+			//  - a file holds it while a flip is in flight, so flips from
+			//    several processes or pref changes in a row all return to
+			//    the first original rather than to each other's halfway
+			//    state.
+			val fallback = if (isDarkMode()) "yes" else "no"
+			val script = "F=/data/local/tmp/pxn_uimode_orig; " +
+				"if [ ! -s \$F ]; then " +
+				"M=\$(cmd uimode night | sed -n 's/^Night mode: *//p' | tr -d '[:space:]'); " +
+				"case \"\$M\" in yes|no|auto|custom_schedule|custom_bedtime) ;; *) M=$fallback;; esac; " +
+				"echo \$M > \$F; fi; " +
+				"ORIG=\$(cat \$F); " +
+				"if [ \"\$ORIG\" = yes ]; then cmd uimode night no; else cmd uimode night yes; fi; " +
+				"sleep 1; " +
+				"if [ -s \$F ]; then cmd uimode night \$(cat \$F); rm -f \$F; else cmd uimode night \$ORIG; fi"
+			Thread {
+				XPLauncher.enqueueProxyCommand { proxy ->
 					try {
-						// Replaces `Thread.currentThread().wait(100)`.
-						//
-						// Two things were verified rather than assumed. Kotlin cannot
-						// call `wait` at all - it is absent from `kotlin.Any` - so a
-						// literal port does not compile. And in Java the call throws
-						// IllegalMonitorStateException on the very first iteration,
-						// because this freshly started thread owns no monitor, which
-						// the catch below swallows: neither `cmd uimode night` would
-						// ever run, making the wait a silent no-op behind four live
-						// callers (QSTileGrid, LauncherGestureNavbarManager,
-						// TaskbarActivator).
-						//
-						// threadSleep(100) is what the wait was written to do.
-						// Nothing ever notifies this Thread, so a working wait could
-						// only ever time out at 100ms. With it the `darkSwitching`
-						// guard serialises correctly and the toggle actually runs.
-						while (darkSwitching) {
-							threadSleep(100)
-						}
-						darkSwitching = true
-
-						proxy.runRootCommand("cmd uimode night " + (if (isDark) "no" else "yes"))
-						threadSleep(1000)
-						proxy.runRootCommand("cmd uimode night " + (if (isDark) "yes" else "no"))
-
-						threadSleep(500)
-						darkSwitching = false
+						proxy.runRootCommand(script)
 					} catch (ignored: Exception) {
 					}
-				}.start()
-			}
+				}
+			}.start()
 		}
 
 		@JvmStatic

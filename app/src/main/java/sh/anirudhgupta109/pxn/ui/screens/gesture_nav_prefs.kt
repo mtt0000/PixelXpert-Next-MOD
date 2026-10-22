@@ -9,26 +9,23 @@ val gesture_nav_prefs: PrefScreen = PrefScreen(
 	nodes = listOf(
 			Illustration(key = "system_nav_fully_gestural_illustration", lottieRawRes = R.raw.lottie_system_nav_fully_gestural, ignore = true),
 			Category(
-	title = R.string.back_gesture_category_title,
+	title = R.string.edge_gestures_title,
 	ignore = true,
 	children = listOf(
-				SwitchPref(key = "BackFromLeft", title = R.string.back_from_left_title, default = "true"),
-				SliderPref(key = "BackLeftHeight", title = R.string.back_height_title, default = "100", min = 10f, max = 100f, continuous = true),
-				SwitchPref(key = "BackFromRight", title = R.string.back_from_right_title, default = "true"),
-				SliderPref(key = "BackRightHeight", title = R.string.back_height_title, default = "100", min = 10f, max = 100f, continuous = true),
+				SwitchPref(key = "EdgeGesturesEnabled", title = R.string.edge_gestures_enable_title, summary = R.string.edge_gestures_summary, default = "false", prominent = true),
+				NavRow(key = "edge_left", title = R.string.edge_left_cat, summary = R.string.edge_side_nav_summary, route = "edge_left", icon = R.drawable.ic_gesture_left_in),
+				NavRow(key = "edge_right", title = R.string.edge_right_cat, summary = R.string.edge_side_nav_summary, route = "edge_right", icon = R.drawable.ic_gesture_right_in),
+				NavRow(key = "edge_bottom", title = R.string.edge_bottom_cat, summary = R.string.edge_bottom_nav_summary, route = "edge_bottom", icon = R.drawable.ic_gesture_bottom_in),
+				NavRow(key = "edge_common", title = R.string.edge_common_cat, summary = R.string.edge_common_summary, route = "edge_common"),
+				NavRow(key = "gesture_backup", title = R.string.gesture_backup_title, summary = R.string.gesture_backup_summary, route = "gesture_backup"),
 	),
 			),
 			Category(
-	title = R.string.gesture_nav_extra_cat,
+	title = R.string.other_gestures_cat,
 	ignore = true,
 	children = listOf(
-				SwitchPref(key = "FCLongSwipeEnabled", title = R.string.gesture_nav_long_swipe_fc_title, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
-				ListPref(key = "leftSwipeUpAction", title = R.string.gesture_nav_left_swipe_up_title, default = "-1", entries = R.array.custom_action_titles, entryValues = R.array.custom_action_codes),
-				SliderPref(key = "leftSwipeUpPercentage", title = R.string.gesture_nav_left_swipe_up_percent, default = "25", min = 5f, max = 40f, step = 1f, valueCount = 1),
-				ListPref(key = "rightSwipeUpAction", title = R.string.gesture_nav_right_swipe_up_title, default = "-1", entries = R.array.custom_action_titles, entryValues = R.array.custom_action_codes),
-				SliderPref(key = "rightSwipeUpPercentage", title = R.string.gesture_nav_right_swipe_up_percent, default = "25", min = 5f, max = 40f, step = 1f, valueCount = 1),
-				ListPref(key = "twoFingerSwipeUpAction", title = R.string.gesture_nav_two_finger_title, default = "None", entries = R.array.custom_action_titles, entryValues = R.array.custom_action_codes),
-				SliderPref(key = "swipeUpPercentage", title = R.string.gesture_nav_swipe_up_height, default = "20", min = 5f, max = 50f, step = 5f, valueCount = 1),
+				NavRow(key = "gesture_statusbar", title = R.string.gesture_statusbar_title, summary = R.string.gesture_statusbar_summary, route = "gesture_statusbar", icon = R.drawable.ic_gesture_top_in),
+				NavRow(key = "gesture_screen", title = R.string.gesture_screen_title, summary = R.string.gesture_screen_summary, route = "gesture_screen", icon = R.drawable.ic_gesture_screen_double_tap),
 	),
 			),
 			Category(

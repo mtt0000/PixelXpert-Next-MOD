@@ -30,8 +30,6 @@ val lock_screen_prefs: PrefScreen = PrefScreen(
 	title = R.string.ls_general_options,
 	ignore = true,
 	children = listOf(
-				SwitchPref(key = "DoubleTapSleepLockscreen", title = R.string.double_tap_sleep_title, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
-				SwitchPref(key = "holdScreenTorchEnabled", title = R.string.so_taptaptorch_title, summary = R.string.so_taptaptorch_summary, default = "false"),
 				SwitchPref(key = "HideLockScreenUserAvatar", title = R.string.hide_avatar_title, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				SliderPref(key = "KeyGuardDimAmount", title = R.string.keyguard_dim_amount_title, default = "-1", min = -1f, max = 100f, step = 1f, valueCount = 1),
 				SwitchPref(key = "WakeUpToSecurityInput", title = R.string.wakeup_to_security_title, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),

@@ -1,9 +1,9 @@
 package sh.anirudhgupta109.pxn.xposed.modpacks.launcher
 
+import android.app.BroadcastOptions
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Process
 import android.view.MotionEvent
 import android.widget.Toast
@@ -18,6 +18,7 @@ import sh.anirudhgupta109.pxn.Constants
 import sh.anirudhgupta109.pxn.xposed.XPrefs.Xprefs
 import sh.anirudhgupta109.pxn.xposed.XposedModPack
 import sh.anirudhgupta109.pxn.xposed.annotations.LauncherModPack
+import sh.anirudhgupta109.pxn.xposed.utils.SystemUIActions
 import sh.anirudhgupta109.pxn.xposed.utils.SystemUtils
 import sh.anirudhgupta109.pxn.xposed.utils.reflection.HookHelper
 import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
@@ -61,9 +62,9 @@ class CustomNavGestures(context: Context) : XposedModPack(context) {
 
 	override fun onPreferenceUpdated(vararg key: String?) {
 		FCLongSwipeEnabled = Xprefs.getBoolean("FCLongSwipeEnabled", false)
-		leftSwipeUpAction = readAction(Xprefs, "leftSwipeUpAction")
-		rightSwipeUpAction = readAction(Xprefs, "rightSwipeUpAction")
-		twoFingerSwipeUpAction = readAction(Xprefs, "twoFingerSwipeUpAction")
+		leftSwipeUpAction = Xprefs.getString("leftSwipeUpAction", "") ?: ""
+		rightSwipeUpAction = Xprefs.getString("rightSwipeUpAction", "") ?: ""
+		twoFingerSwipeUpAction = Xprefs.getString("twoFingerSwipeUpAction", "") ?: ""
 		leftSwipeUpPercentage = Xprefs.getSliderFloat("leftSwipeUpPercentage", 25f) / 100f
 		rightSwipeUpPercentage = Xprefs.getSliderFloat("rightSwipeUpPercentage", 25f) / 100f
 		swipeUpPercentage = Xprefs.getSliderFloat("swipeUpPercentage", 25f) / 100f
@@ -125,11 +126,11 @@ class CustomNavGestures(context: Context) : XposedModPack(context) {
 			val currentW = if (isLandscape) displayH else displayW
 
 			if (pointers == 1) {
-				if (leftSwipeUpAction != NO_ACTION &&
+				if (SystemUIActions.isBound(leftSwipeUpAction) &&
 					e.x < currentW * leftSwipeUpPercentage
 				) {
 					swipeType = SWIPE_LEFT
-				} else if (rightSwipeUpAction != NO_ACTION &&
+				} else if (SystemUIActions.isBound(rightSwipeUpAction) &&
 					e.x > currentW * (1f - rightSwipeUpPercentage)
 				) {
 					swipeType = SWIPE_RIGHT
@@ -137,7 +138,7 @@ class CustomNavGestures(context: Context) : XposedModPack(context) {
 			}
 		}
 
-		if (twoFingerSwipeUpAction != NO_ACTION &&
+		if (SystemUIActions.isBound(twoFingerSwipeUpAction) &&
 			pointers == 2 &&
 			swipeType != SWIPE_TWO_FINGER
 		) { //must be outside down. usually down is one finger
@@ -162,7 +163,7 @@ class CustomNavGestures(context: Context) : XposedModPack(context) {
 				setObjectField(param.thisObject, "mActivePointerId", MotionEvent.INVALID_POINTER_ID)
 				setObjectField(param.thisObject, "mPassedWindowMoveSlop", false)
 				FCHandled = true
-				runAction(ACTION_KILL_APP)
+				runAction(ACTION_KILL_APP.toString())
 			}
 		}
 
@@ -248,8 +249,13 @@ class CustomNavGestures(context: Context) : XposedModPack(context) {
 		}
 	}
 
-	private fun runAction(action: Int) {
-		when (action) {
+	/**
+	 * The actions the launcher always ran itself stay here; every other one
+	 * of the shared gesture actions (see [SystemUIActions]) is handed to
+	 * SystemUI, which runs the edge gestures with the same list.
+	 */
+	private fun runAction(action: String) {
+		when (SystemUIActions.code(action)) {
 			ACTION_BACK -> goBack()
 			ACTION_SCREENSHOT -> takeScreenshot()
 			ACTION_NOTIFICATION -> toggleNotification()
@@ -257,6 +263,23 @@ class CustomNavGestures(context: Context) : XposedModPack(context) {
 			ACTION_ONE_HANDED -> startOneHandedMode()
 			ACTION_SLEEP -> goToSleep()
 			ACTION_SWITCH_APP_PROFILE -> switchAppProfile()
+			else -> forwardToSystemUI(action)
+		}
+	}
+
+	/**
+	 * The launcher shares its identity with the broadcast: that is how
+	 * SystemUI tells this request from one any app could send.
+	 */
+	private fun forwardToSystemUI(action: String) {
+		try {
+			val intent = Intent(Constants.ACTION_RUN_GESTURE_ACTION)
+				.setPackage(Constants.SYSTEM_UI_PACKAGE)
+				.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+				.putExtra(Constants.EXTRA_GESTURE_ACTION, action)
+			val options = BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
+			mContext.sendBroadcast(intent, null, options)
+		} catch (ignored: Throwable) {
 		}
 	}
 
@@ -335,7 +358,6 @@ class CustomNavGestures(context: Context) : XposedModPack(context) {
 	}
 
 	companion object {
-		private const val NO_ACTION = -1
 		private const val ACTION_SCREENSHOT = 1
 		private const val ACTION_BACK = 2
 		private const val ACTION_KILL_APP = 3
@@ -352,16 +374,8 @@ class CustomNavGestures(context: Context) : XposedModPack(context) {
 
 		private var swipeUpPercentage = 0.2f
 		private var FCLongSwipeEnabled = false
-		private var leftSwipeUpAction = NO_ACTION
-		private var rightSwipeUpAction = NO_ACTION
-		private var twoFingerSwipeUpAction = NO_ACTION
-
-		@JvmStatic
-		private fun readAction(xprefs: SharedPreferences, prefName: String): Int =
-			try {
-				Integer.parseInt(xprefs.getString(prefName, "")!!.trim())
-			} catch (ignored: Exception) {
-				NO_ACTION
-			}
+		private var leftSwipeUpAction = ""
+		private var rightSwipeUpAction = ""
+		private var twoFingerSwipeUpAction = ""
 	}
 }

@@ -66,6 +66,15 @@ object Constants {
 	const val ACTION_SLEEP: String = "$APPLICATION_ID.ACTION_SLEEP"
 
 	/**
+	 * Asks SystemUI to run a gesture action (extra [EXTRA_GESTURE_ACTION], in
+	 * the `SystemUIActions` string form). The launcher's bottom swipes send it
+	 * for every action they cannot run themselves; SystemUI only accepts it
+	 * from the launcher, identified through the broadcast's shared identity.
+	 */
+	const val ACTION_RUN_GESTURE_ACTION: String = "$APPLICATION_ID.ACTION_RUN_GESTURE_ACTION"
+	const val EXTRA_GESTURE_ACTION: String = "action"
+
+	/**
 	 * App profile switching: the gesture asks for a switch, and the proxy
 	 * answers which profiles are available for the current app.
 	 */

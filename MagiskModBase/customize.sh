@@ -131,17 +131,20 @@ APK_PATH="$MODPATH/PixelXpert-Next.apk"
 pxn_say() { ui_print "$1"; }
 . "$MODPATH/pxn_app.sh"
 if [ -f "$APK_PATH" ]; then
-	# Any installed copy is removed and the zip's APK installed fresh (see
-	# pxn_app.sh); settings are carried over. The backup lives in the module
+	# The installed copy is updated in place when its signature allows, and
+	# otherwise removed and the zip's APK installed fresh (see pxn_app.sh);
+	# settings are carried over either way. The backup lives in the module
 	# folder so the boot-time retry can still restore it.
 	if ! pxnReinstallApp "$APK_PATH" "$MODPATH/settings_backup"; then
 		ui_print "- Will retry on boot."
 		touch "$MODPATH/install_needed"
 	fi
-	ui_print ''
-	ui_print '- If PixelXpert-Next was enabled in LSPosed before,'
-	ui_print '  enable it again (with its scope) after reboot:'
-	ui_print '  removing the old app clears its LSPosed entry.'
+	if [ "$PXN_REINSTALLED" = "1" ]; then
+		ui_print ''
+		ui_print '- The old app had to be removed, which clears its'
+		ui_print '  LSPosed/Vector entry: enable PixelXpert-Next again'
+		ui_print '  (with its scope) after reboot.'
+	fi
 else
 	ui_print "- APK not found in zip!"
 fi

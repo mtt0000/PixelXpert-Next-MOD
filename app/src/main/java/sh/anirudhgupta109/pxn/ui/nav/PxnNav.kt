@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -67,6 +68,10 @@ import sh.anirudhgupta109.pxn.ui.screens.own_prefs_header
 import sh.anirudhgupta109.pxn.ui.screens.preferenceScreens
 import sh.anirudhgupta109.pxn.ui.screens.routeToScreenKey
 import sh.anirudhgupta109.pxn.ui.hooks.HooksScreen
+import sh.anirudhgupta109.pxn.ui.hiddenapps.AutoBackupPrompt
+import sh.anirudhgupta109.pxn.util.AutoBackup
+import sh.anirudhgupta109.pxn.ui.hiddenapps.EdgeExcludedAppsScreen
+import sh.anirudhgupta109.pxn.ui.hiddenapps.GestureBackupScreen
 import sh.anirudhgupta109.pxn.ui.hiddenapps.HiddenAppsScreen
 import sh.anirudhgupta109.pxn.ui.iconpack.IconPackScreen
 import sh.anirudhgupta109.pxn.ui.search.SearchScreen
@@ -104,6 +109,12 @@ sealed interface Route : NavKey {
 
 	@Serializable
 	data object HiddenApps : Route
+
+	@Serializable
+	data object EdgeExcludedApps : Route
+
+	@Serializable
+	data object GestureBackup : Route
 
 	/**
 	 * Bottom-navigation tabs. Distinct keys rather than [Unported] so each can
@@ -147,6 +158,8 @@ private data class TabSpec(
 private val bespokeRoutes: Map<String, NavKey> = mapOf(
 	"icon_pack" to Route.IconPack,
 	"hidden_apps" to Route.HiddenApps,
+	"edge_excluded_apps" to Route.EdgeExcludedApps,
+	"gesture_backup" to Route.GestureBackup,
 	// Settings' "Check for updates" row points at the update screen the
 	// bottom nav also reaches - and there is no `update_prefs` preference XML
 	// for routeToScreenKey to map to, so without this entry it falls through
@@ -195,6 +208,7 @@ private val tabs = listOf(
  */
 @Composable
 private fun OverflowMenu(store: PrefStore) {
+	val context = LocalContext.current
 	var expanded by remember { mutableStateOf(false) }
 
 	val exportLauncher = rememberLauncherForActivityResult(
@@ -208,7 +222,12 @@ private fun OverflowMenu(store: PrefStore) {
 	) { uri ->
 		// SystemUI is restarted after an import so the hooks pick the new
 		// values up from RemotePreferences.
-		if (uri != null && store.importFrom(uri)) Restarter.restartSystemUI()
+		if (uri != null && store.importFrom(uri)) {
+			// An imported file is a decision about the settings: the automatic
+			// backup takes it over rather than offering an older copy.
+			AutoBackup.dismiss(context)
+			Restarter.restartSystemUI()
+		}
 	}
 
 	IconButton(onClick = { expanded = true }) {
@@ -314,6 +333,7 @@ private val OPEN_MIME_TYPES = arrayOf("*/*")
 @Composable
 fun PxnNav(startRoute: Route? = null) {
 	val store: PrefStore = koinInject()
+	AutoBackupPrompt(store)
 	// rememberNavBackStack is NOT generic: it returns NavBackStack<NavKey>.
 	val backStack = rememberNavBackStack(Route.Home)
 
@@ -387,6 +407,8 @@ fun PxnNav(startRoute: Route? = null) {
 		is Route.Search -> R.string.searchpreference_title
 		is Route.IconPack -> R.string.icon_packs_title
 		is Route.HiddenApps -> R.string.hidden_apps_title
+		is Route.EdgeExcludedApps -> R.string.edge_excluded_apps_title
+		is Route.GestureBackup -> R.string.gesture_backup_title
 		is Route.Update -> R.string.navigation_update
 		is Route.Hooks -> R.string.navigation_hooks
 		is Route.Settings -> R.string.navigation_settings
@@ -429,11 +451,12 @@ fun PxnNav(startRoute: Route? = null) {
 					),
 				)
 
-				// The reach belongs to the quick settings screen only, so it
-				// is drawn only while that screen is on top.
-				val onQuickSettings =
-					(backStack.lastOrNull() as? Route.Pref)?.screenKey == "quicksettings_prefs"
-				if (onQuickSettings) PullDownIndicator(store)
+				// The reach belongs to the status bar gestures screen, where
+				// the pull-down lives, so it is drawn only while that screen
+				// is on top.
+				val onPullDown =
+					(backStack.lastOrNull() as? Route.Pref)?.screenKey == "gesture_statusbar_prefs"
+				if (onPullDown) PullDownIndicator(store)
 			}
 		},
 		bottomBar = {
@@ -524,6 +547,8 @@ fun PxnNav(startRoute: Route? = null) {
 				entry<Route.Unported> { key -> NavScene { MissingScreen(key.route) } }
 				entry<Route.IconPack> { NavScene { IconPackScreen() } }
 				entry<Route.HiddenApps> { NavScene { HiddenAppsScreen() } }
+				entry<Route.EdgeExcludedApps> { NavScene { EdgeExcludedAppsScreen() } }
+				entry<Route.GestureBackup> { NavScene { GestureBackupScreen() } }
 				entry<Route.Search> {
 					NavScene {
 						SearchScreen(
