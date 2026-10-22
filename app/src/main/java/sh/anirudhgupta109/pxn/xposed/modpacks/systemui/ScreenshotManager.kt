@@ -5,21 +5,30 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.drawable.Drawable
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.UserManager
+import android.view.Display
+import android.widget.Toast
+import androidx.core.content.res.ResourcesCompat
+import de.robv.android.xposed.XposedHelpers.callMethod
+import de.robv.android.xposed.XposedHelpers.getIntField
 import de.robv.android.xposed.XposedHelpers.getObjectField
 import de.robv.android.xposed.XposedHelpers.setObjectField
 import io.github.libxposed.api.XposedModuleInterface
+import java.lang.reflect.Proxy
 import java.util.Locale
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
+import sh.anirudhgupta109.pxn.R
 import sh.anirudhgupta109.pxn.annotations.ChildProcessModPack
+import sh.anirudhgupta109.pxn.xposed.XPLauncher
 import sh.anirudhgupta109.pxn.xposed.XPrefs.Xprefs
 import sh.anirudhgupta109.pxn.xposed.XposedModPack
 import sh.anirudhgupta109.pxn.xposed.annotations.SystemUIModPack
@@ -43,6 +52,12 @@ import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
  * fires only when a target is actually picked - cancelling the sheet keeps the
  * file - and the MediaStore entry is deleted after a grace period, because the
  * receiving app reads the URI after the chooser has closed.
+ *
+ * "auto-scroll capture" adds a button to the screenshot shelf, next to the
+ * platform "Capture more" chip (which only shows up for apps that implement
+ * scroll capture): it dismisses the shelf and runs [AutoScrollCapture], which
+ * scrolls the app itself and stitches the frames, like Samsung's scroll
+ * capture.
  */
 @SystemUIModPack
 @ChildProcessModPack(processNameContains = "screenshot")
@@ -53,11 +68,20 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 
 		private const val ACTION_SCREENSHOT_SHARED = "sh.anirudhgupta109.pxn.SCREENSHOT_SHARED"
 		private const val EXTRA_SHARED_URI = "pxn_shared_uri"
+
+		/** WindowManager.TAKE_SCREENSHOT_PROVIDED_IMAGE, hidden. */
+		private const val TAKE_SCREENSHOT_PROVIDED_IMAGE = 3
+		private const val SHELF_DISMISS_DELAY = 400L
 	}
 
 	private var ScreenshotChordInsecure = false
 	private var ScreenshotDeleteShared = false
 	private var ScreenshotDeleteSharedDelay = 60
+	private var ScreenshotAutoScroll = false
+	private var ScreenshotAutoScrollMaxSteps = 10
+
+	/** SystemUI's ImageCaptureImpl, the display capture the screenshot itself uses. */
+	private var imageCapture: Any? = null
 
 	private var sharedReceiverRegistered = false
 	private var sharedRequestCode = 0
@@ -68,6 +92,8 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 		ScreenshotChordInsecure = Xprefs.getBoolean("ScreenshotChordInsecure", false)
 		ScreenshotDeleteShared = Xprefs.getBoolean("ScreenshotDeleteShared", false)
 		ScreenshotDeleteSharedDelay = Xprefs.getSliderInt("ScreenshotDeleteSharedDelay", 60)
+		ScreenshotAutoScroll = Xprefs.getBoolean("ScreenshotAutoScroll", false)
+		ScreenshotAutoScrollMaxSteps = Xprefs.getSliderInt("ScreenshotAutoScrollMaxSteps", 10)
 	}
 
 	override fun onPackageLoaded(PRParam: XposedModuleInterface.PackageReadyParam) {
@@ -124,6 +150,24 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 				}
 			}
 
+		ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ImageCaptureImpl")
+			.afterConstruction()
+			.run { param -> imageCapture = param.thisObject }
+
+		// Runs on the main thread right after the actions provider was created for
+		// the new screenshot, so the button lands after the stock ones.
+		ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ScreenshotActionsController")
+			.after("setCurrentScreenshot")
+			.run { param ->
+				if (!ScreenshotAutoScroll) return@run
+				val controller = param.thisObject ?: return@run
+				try {
+					addAutoScrollButton(controller, param.args[0])
+				} catch (t: Throwable) {
+					log(t)
+				}
+			}
+
 		//17 - much easier approach: killing mediaplayer totally
 		ReflectedClass.of(MediaPlayer::class.java)
 			.before("start")
@@ -158,6 +202,89 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 					}
 				}
 			}
+	}
+
+	private fun addAutoScrollButton(controller: Any, screenshot: Any?) {
+		// A provided image (an app handing SystemUI a bitmap) has nothing on screen to scroll.
+		val type = runCatching { getIntField(screenshot, "type") }.getOrDefault(-1)
+		if (type == TAKE_SCREENSHOT_PROVIDED_IMAGE) return
+		val displayId = runCatching { getIntField(screenshot, "displayId") }.getOrDefault(Display.DEFAULT_DISPLAY)
+
+		val viewModel = getObjectField(controller, "viewModel")
+		val addAction = viewModel.javaClass.methods.first { it.name == "addAction" && it.parameterTypes.size == 3 }
+		val loader = viewModel.javaClass.classLoader
+
+		val onClick = Proxy.newProxyInstance(loader, arrayOf(addAction.parameterTypes[2])) { proxy, method, args ->
+			when (method.name) {
+				"invoke" -> {
+					onAutoScrollClicked(controller, displayId)
+					Class.forName("kotlin.Unit", false, loader).getField("INSTANCE").get(null)
+				}
+				"equals" -> proxy === args?.getOrNull(0)
+				"hashCode" -> System.identityHashCode(proxy)
+				else -> "PXN auto-scroll capture"
+			}
+		}
+		addAction.invoke(viewModel, autoScrollAppearance(addAction.parameterTypes[0]), true, onClick)
+	}
+
+	/**
+	 * `ActionButtonAppearance(icon, label, description, tint = true, ...)`: the
+	 * shortest constructor wins (the @JvmOverloads one), extra parameters get
+	 * the Kotlin defaults.
+	 */
+	private fun autoScrollAppearance(appearanceClass: Class<*>): Any {
+		val res = XPLauncher.moduleResources!!
+		val icon = ResourcesCompat.getDrawable(res, R.drawable.ic_scroll_capture, mContext.theme)
+		val label = res.getString(R.string.scroll_capture_label)
+		val constructor = appearanceClass.constructors
+			.filter { ctor ->
+				val types = ctor.parameterTypes
+				types.size >= 3 &&
+					types[0] == Drawable::class.java &&
+					types[1] == CharSequence::class.java &&
+					types[2] == CharSequence::class.java
+			}
+			.minBy { it.parameterTypes.size }
+		val args = constructor.parameterTypes.mapIndexed { index, type ->
+			when {
+				index == 0 -> icon
+				index == 1 || index == 2 -> label
+				type == Boolean::class.javaPrimitiveType -> true
+				type == Int::class.javaPrimitiveType -> 0
+				else -> null
+			}
+		}
+		return constructor.newInstance(*args.toTypedArray())
+	}
+
+	private fun onAutoScrollClicked(controller: Any, displayId: Int) {
+		val capture = imageCapture
+		if (capture == null) {
+			XPLauncher.moduleResources?.getString(R.string.scroll_capture_failed)?.let {
+				Toast.makeText(mContext, it, Toast.LENGTH_SHORT).show()
+			}
+			return
+		}
+		if (AutoScrollCapture.running) return
+		AutoScrollCapture.running = true
+
+		// The shelf has to be gone before the first frame is captured; the injected
+		// swipes would dismiss it anyway, as a touch outside.
+		try {
+			val viewProxy = getObjectField(getObjectField(controller, "actionExecutor"), "viewProxy")
+			callMethod(viewProxy, "requestDismissal", *arrayOf<Any?>(null))
+		} catch (t: Throwable) {
+			log(t)
+		}
+		mainHandler.postDelayed({
+			try {
+				AutoScrollCapture(mContext, capture, displayId, ScreenshotAutoScrollMaxSteps.coerceAtLeast(1)).start()
+			} catch (t: Throwable) {
+				AutoScrollCapture.running = false
+				log(t)
+			}
+		}, SHELF_DISMISS_DELAY)
 	}
 
 	/** IntentSender the chooser fires once a share target is picked for [uri]. */
