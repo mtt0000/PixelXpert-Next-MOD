@@ -84,6 +84,8 @@ val preferenceDefaults: Map<String, String?> = mapOf(
 	"QSSecondaryLabelScaleFactor" to "0",
 	"RecentClearAllReposition" to "false",
 	"RecentClearAllLegacyStyle" to "false",
+	"RecentClearAllInActionBar" to "false",
+	"RecentHiddenAppsInActionBar" to "false",
 	"ClipboardShareEnabled" to "true",
 	"RecentHideApp" to "true",
 	"RecentKillApp" to "true",

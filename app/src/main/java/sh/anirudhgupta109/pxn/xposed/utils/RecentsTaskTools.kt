@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import de.robv.android.xposed.XposedHelpers
@@ -30,6 +31,9 @@ import sh.anirudhgupta109.pxn.xposed.utils.toolkit.Logger
 object RecentsTaskTools {
 
 	const val LOG: String = "PXN-Recents: "
+
+	/** Tag of ClearAllButtonMod's button, so other buttons can line up next to it. */
+	const val CLEAR_ALL_TAG: String = "pxn_clear_all_btn"
 
 	private val awayViews = WeakHashMap<View, List<String>>()
 
@@ -118,6 +122,32 @@ object RecentsTaskTools {
 			}
 		}
 		return out
+	}
+
+	/**
+	 * The row of the overview actions bar that holds Screenshot / Select, which
+	 * is where the old PixelXpert build put its clear-all button. Looked up by
+	 * the launcher's `action_buttons` id, then as the first horizontal
+	 * LinearLayout below [root].
+	 */
+	@JvmStatic
+	fun findActionButtonsRow(root: ViewGroup): LinearLayout? {
+		try {
+			val id = root.resources.getIdentifier("action_buttons", "id", root.context.packageName)
+			if (id != 0) {
+				val byId = root.findViewById<View>(id)
+				if (byId is LinearLayout && byId.orientation == LinearLayout.HORIZONTAL) return byId
+			}
+		} catch (ignored: Throwable) {
+		}
+
+		for (i in 0 until root.childCount) {
+			val child = root.getChildAt(i)
+			if (child is LinearLayout && child.orientation == LinearLayout.HORIZONTAL) return child
+			if (child is ViewGroup) findActionButtonsRow(child)?.let { return it }
+		}
+		Logger.log(LOG + "no action buttons row in " + root.javaClass.name)
+		return null
 	}
 
 	@JvmStatic

@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import de.robv.android.xposed.XposedHelpers
 import io.github.libxposed.api.XposedModuleInterface
 import java.util.concurrent.Executors
@@ -52,6 +53,9 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 	@Volatile
 	private var hidden: List<String> = emptyList()
 
+	@Volatile
+	private var manageInActionBar = false
+
 	private var manageButton: ImageButton? = null
 	private var overlayVisibility = View.GONE
 
@@ -75,7 +79,14 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 	}
 
 	override fun onPreferenceUpdated(vararg key: String?) {
+		// The placement is decided when the overlay is inflated, so a change
+		// needs a fresh launcher process, like ClearAllButtonMod's switches.
+		if (key.isNotEmpty() && key[0] == "RecentHiddenAppsInActionBar") {
+			SystemUtils.killSelf()
+		}
+
 		enabled = Xprefs.getBoolean("RecentHideApp", true)
+		manageInActionBar = Xprefs.getBoolean("RecentHiddenAppsInActionBar", false)
 		if (key.isEmpty() || key[0] == HiddenApps.PREF_KEY) {
 			hidden = HiddenApps.parse(Xprefs.getString(HiddenApps.PREF_KEY, ""))
 		}
@@ -180,25 +191,45 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 	// -------------------------------------------------------------- manage button
 
 	/**
-	 * Adds the "manage hidden apps" button to the overview actions bar, at the
-	 * start edge. The bar keeps its own height (ClearAllButtonMod stretches it
-	 * to the full screen when its reposition switch is on, which puts this
-	 * button mid-screen, opposite the clear-all button).
+	 * Adds the "manage hidden apps" button to the Recents overlay, in one of
+	 * two places chosen by `RecentHiddenAppsInActionBar`:
+	 *  - on: in the Screenshot / Select row, right after the clear-all button
+	 *    when that one is there too (the old PixelXpert placement);
+	 *  - off (default): at the end edge. When ClearAllButtonMod has stretched
+	 *    the bar over the whole screen, the button sits right above its
+	 *    floating clear-all button, clear of the cards; otherwise at the end
+	 *    of the bar itself.
 	 */
 	private fun addManageButton(parent: FrameLayout) {
 		val ctx = parent.context
 		val button = RecentsTaskTools.createRoundButton(ctx, R.drawable.ic_manage_hidden, TaskButtonsHost.TAG_PREFIX + "manage", 10)
 		val size = RecentsTaskTools.dp(ctx, 44f)
-		val params = FrameLayout.LayoutParams(size, size)
-		params.gravity = Gravity.START or Gravity.CENTER_VERTICAL
-		params.marginStart = RecentsTaskTools.dp(ctx, 16f)
-		button.layoutParams = params
 		button.elevation = RecentsTaskTools.dp(ctx, 8f).toFloat()
 		button.contentDescription = RecentsTaskTools.moduleString(R.string.hidden_apps_title)
 		button.setOnClickListener { showManageDialog(it.context) }
 		button.visibility = View.GONE
 
-		parent.addView(button)
+		val row = if (manageInActionBar) RecentsTaskTools.findActionButtonsRow(parent) else null
+		if (row != null) {
+			val params = LinearLayout.LayoutParams(size, size)
+			params.gravity = Gravity.CENTER_VERTICAL
+			params.marginStart = RecentsTaskTools.dp(ctx, 8f)
+			params.marginEnd = RecentsTaskTools.dp(ctx, 8f)
+			val clearAll = row.findViewWithTag<View>(RecentsTaskTools.CLEAR_ALL_TAG)
+			val index = if (clearAll != null) row.indexOfChild(clearAll) + 1 else 0
+			row.addView(button, index, params)
+		} else {
+			val params = FrameLayout.LayoutParams(size, size)
+			params.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+			params.marginEnd = RecentsTaskTools.dp(ctx, 16f)
+			if (parent.layoutParams?.height == ViewGroup.LayoutParams.MATCH_PARENT) {
+				// Centred like clear-all, then lifted by half of each button
+				// (clear-all is at most 48dp) plus a 12dp gap.
+				params.bottomMargin = RecentsTaskTools.dp(ctx, 24f + 12f + 22f)
+			}
+			parent.addView(button, params)
+		}
+
 		manageButton = button
 		updateManageButton()
 	}

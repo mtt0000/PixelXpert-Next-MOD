@@ -646,6 +646,10 @@
     <string name="clipboard_share_failed">Failed to get clipboard service</string>
     <string name="clear_all_legacy_style_title">Round \"Clear all\" button</string>
     <string name="clear_all_legacy_style_summary">Round black button instead of the plain icon. Needs the clear-all button from Miscellaneous &gt; Launcher options. Restarts the launcher.</string>
+    <string name="clear_all_in_action_bar_title">Clear-all button in the action bar</string>
+    <string name="clear_all_in_action_bar_summary">Puts the clear-all button in the bottom bar, left of Screenshot and Select, instead of beside the cards. Restarts the launcher.</string>
+    <string name="hidden_apps_in_action_bar_title">Hidden-apps button in the action bar</string>
+    <string name="hidden_apps_in_action_bar_summary">Puts the hidden-apps button in the bottom bar, left of Screenshot and Select, instead of on the right above the clear-all button. Restarts the launcher.</string>
     <string name="kill_app_title">Kill app button</string>
     <string name="kill_app_summary">Adds a button on every Recents card that force-stops the app and removes the card</string>
     <string name="hide_app_title">Hide app button</string>

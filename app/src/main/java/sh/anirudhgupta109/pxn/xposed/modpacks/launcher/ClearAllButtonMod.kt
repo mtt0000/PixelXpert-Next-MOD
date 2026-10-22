@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import androidx.core.content.res.ResourcesCompat
 import de.robv.android.xposed.XposedHelpers.findMethodBestMatch
 import io.github.libxposed.api.XposedModuleInterface
@@ -20,6 +21,7 @@ import sh.anirudhgupta109.pxn.xposed.XPLauncher
 import sh.anirudhgupta109.pxn.xposed.XPrefs.Xprefs
 import sh.anirudhgupta109.pxn.xposed.XposedModPack
 import sh.anirudhgupta109.pxn.xposed.annotations.LauncherModPack
+import sh.anirudhgupta109.pxn.xposed.utils.RecentsTaskTools
 import sh.anirudhgupta109.pxn.xposed.utils.SystemUtils
 import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
 
@@ -31,8 +33,13 @@ import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
  *  - on: the round look of the old PixelXpert build, a 44dp circle with
  *    a semi-transparent black fill and a white icon.
  *
- * The button is only added when `RecentClearAllReposition` is on. Flipping either
- * preference kills the launcher process so the hooks re-register in the new configuration.
+ * Two placements, chosen by `RecentClearAllInActionBar`:
+ *  - off (default): floating at the end edge, mid-screen, beside the cards;
+ *  - on: first button of the overview actions row, left of Screenshot / Select.
+ *
+ * The button is only added when `RecentClearAllReposition` is on. Flipping any of
+ * these preferences kills the launcher process so the hooks re-register in the new
+ * configuration.
  */
 @LauncherModPack
 class ClearAllButtonMod(context: Context) : XposedModPack(context) {
@@ -41,12 +48,15 @@ class ClearAllButtonMod(context: Context) : XposedModPack(context) {
 	private var clearAllButton: FrameLayout? = null
 
 	override fun onPreferenceUpdated(vararg key: String?) {
-		if (key.isNotEmpty() && (key[0] == "RecentClearAllReposition" || key[0] == "RecentClearAllLegacyStyle")) {
+		if (key.isNotEmpty() &&
+			(key[0] == "RecentClearAllReposition" || key[0] == "RecentClearAllLegacyStyle" || key[0] == "RecentClearAllInActionBar")
+		) {
 			SystemUtils.killSelf()
 		}
 
 		RecentClearAllReposition = Xprefs.getBoolean("RecentClearAllReposition", false)
 		RecentClearAllLegacyStyle = Xprefs.getBoolean("RecentClearAllLegacyStyle", false)
+		RecentClearAllInActionBar = Xprefs.getBoolean("RecentClearAllInActionBar", false)
 	}
 
 	override fun onPackageLoaded(PRParam: XposedModuleInterface.PackageReadyParam) {
@@ -84,10 +94,10 @@ class ClearAllButtonMod(context: Context) : XposedModPack(context) {
 				clearAllIcon = ImageView(mContext)
 				clearAllIcon!!.setImageDrawable(ResourcesCompat.getDrawable(XPLauncher.moduleResources!!, R.drawable.ic_clear_all, mContext.theme))
 
-				val params: FrameLayout.LayoutParams
+				val size: Int
 				if (RecentClearAllLegacyStyle) {
 					// Round look: 44dp circle, 60% black fill, white icon, 10dp padding, 8dp elevation.
-					val size = dp(44f)
+					size = dp(44f)
 					val padding = dp(10f)
 
 					clearAllIcon!!.drawable.setTintList(ColorStateList.valueOf(Color.WHITE))
@@ -100,18 +110,13 @@ class ClearAllButtonMod(context: Context) : XposedModPack(context) {
 					clearAllButton!!.elevation = dp(8f).toFloat()
 
 					clearAllButton!!.addView(clearAllIcon, FrameLayout.LayoutParams(size, size))
-					params = FrameLayout.LayoutParams(size, size)
-					params.rightMargin = dp(16f)
 				} else {
+					size = ViewGroup.LayoutParams.WRAP_CONTENT
 					clearAllIcon!!.drawable.setTintList(getThemedColor(mContext))
 					clearAllButton!!.addView(clearAllIcon)
-					params = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-					params.rightMargin = dp(16f)
 				}
 
-				params.gravity = Gravity.END or Gravity.CENTER_VERTICAL
-
-				clearAllButton!!.layoutParams = params
+				clearAllButton!!.tag = RecentsTaskTools.CLEAR_ALL_TAG
 				clearAllButton!!.isClickable = true
 				clearAllButton!!.setOnClickListener { v ->
 					if (recentView != null) {
@@ -123,8 +128,25 @@ class ClearAllButtonMod(context: Context) : XposedModPack(context) {
 				}
 
 				val parent = param.thisObject as FrameLayout
-				parent.layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT //resize to whole screen
-				parent.addView(clearAllButton)
+
+				// Action-bar placement, as the old PixelXpert build did it: first in
+				// the Screenshot / Select row. Without that row it falls back to the
+				// floating placement.
+				val row = if (RecentClearAllInActionBar) RecentsTaskTools.findActionButtonsRow(parent) else null
+				if (row != null) {
+					val params = LinearLayout.LayoutParams(size, size)
+					params.gravity = Gravity.CENTER_VERTICAL
+					params.marginStart = dp(8f)
+					params.marginEnd = dp(8f)
+					row.addView(clearAllButton, 0, params)
+				} else {
+					val params = FrameLayout.LayoutParams(size, size)
+					params.rightMargin = dp(16f)
+					params.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+
+					parent.layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT //resize to whole screen
+					parent.addView(clearAllButton, params)
+				}
 				clearAllButton!!.visibility = View.GONE
 			}
 	}
@@ -135,6 +157,7 @@ class ClearAllButtonMod(context: Context) : XposedModPack(context) {
 	companion object {
 		private var RecentClearAllReposition = false
 		private var RecentClearAllLegacyStyle = false
+		private var RecentClearAllInActionBar = false
 
 		@JvmStatic
 		fun getThemedColor(context: Context): ColorStateList? = getSystemAttrColor(

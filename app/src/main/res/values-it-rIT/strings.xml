@@ -579,6 +579,10 @@
     <string name="clipboard_share_failed">Impossibile accedere agli appunti</string>
     <string name="clear_all_legacy_style_title">Pulsante \"Cancella tutto\" rotondo</string>
     <string name="clear_all_legacy_style_summary">Pulsante nero rotondo invece della sola icona. Richiede il pulsante cancella tutto in Varie &gt; Opzioni Launcher. Riavvia il launcher.</string>
+    <string name="clear_all_in_action_bar_title">Pulsante cancella tutto nella barra azioni</string>
+    <string name="clear_all_in_action_bar_summary">Mette il pulsante cancella tutto nella barra in basso, a sinistra di Screenshot e Seleziona, invece che accanto alle schede. Riavvia il launcher.</string>
+    <string name="hidden_apps_in_action_bar_title">Pulsante app nascoste nella barra azioni</string>
+    <string name="hidden_apps_in_action_bar_summary">Mette il pulsante delle app nascoste nella barra in basso, a sinistra di Screenshot e Seleziona, invece che a destra sopra il pulsante cancella tutto. Riavvia il launcher.</string>
     <string name="kill_app_title">Pulsante chiudi app</string>
     <string name="kill_app_summary">Aggiunge su ogni scheda dei Recenti un pulsante che forza l\'arresto dell\'app e rimuove la scheda</string>
     <string name="hide_app_title">Pulsante nascondi app</string>
