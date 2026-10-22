@@ -22,6 +22,7 @@ val misc_prefs: PrefScreen = PrefScreen(
 				SwitchPref(key = "ScreenshotDeleteShared", title = R.string.screenshot_delete_shared_title, summary = R.string.screenshot_delete_shared_summary, default = "false"),
 				SliderPref(key = "ScreenshotDeleteSharedDelay", title = R.string.screenshot_delete_shared_delay_title, summary = R.string.screenshot_delete_shared_delay_summary, default = "60", min = 10f, max = 600f, step = 10f, valueCount = 1, dependency = "ScreenshotDeleteShared"),
 				SwitchPref(key = "ScreenshotAutoScroll", title = R.string.screenshot_auto_scroll_title, summary = R.string.screenshot_auto_scroll_summary, default = "false"),
+				SwitchPref(key = "ScreenshotAutoScrollManual", title = R.string.screenshot_auto_scroll_manual_title, summary = R.string.screenshot_auto_scroll_manual_summary, default = "true", dependency = "ScreenshotAutoScroll"),
 				SliderPref(key = "ScreenshotAutoScrollMaxSteps", title = R.string.screenshot_auto_scroll_steps_title, summary = R.string.screenshot_auto_scroll_steps_summary, default = "10", min = 2f, max = 25f, step = 1f, valueCount = 1, dependency = "ScreenshotAutoScroll"),
 				SwitchPref(key = "InsecureScreenRecord", title = R.string.screen_record_insecure, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				SwitchPref(key = "allScreenRotations", title = R.string.allow_all_screen_rotations, summary = R.string.allow_all_screen_rotations_summary, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),

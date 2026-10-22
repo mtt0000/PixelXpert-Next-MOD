@@ -321,10 +321,14 @@
     <string name="screenshot_delete_shared_delay_summary">Time the receiving app gets to read the screenshot before it is deleted</string>
     <string name="screenshot_auto_scroll_title">Auto-scroll capture</string>
     <string name="screenshot_auto_scroll_summary">Adds an \"Auto-scroll\" button to the screenshot toolbar that scrolls the app by itself and stitches a long screenshot, also in apps where \"Capture more\" is not available</string>
+    <string name="screenshot_auto_scroll_manual_title">Scroll by tapping the button</string>
+    <string name="screenshot_auto_scroll_manual_summary">Like Samsung: every tap on \"Scroll\" adds a page, \"Done\" saves. When off, it scrolls by itself until \"Stop\". A tap anywhere else on the screen always ends the capture</string>
     <string name="screenshot_auto_scroll_steps_title">Auto-scroll capture: maximum scrolls</string>
-    <string name="screenshot_auto_scroll_steps_summary">The capture also stops at the end of the page</string>
+    <string name="screenshot_auto_scroll_steps_summary">Only when scrolling by itself. The capture also stops at the end of the page</string>
     <string name="scroll_capture_label">Auto-scroll</string>
-    <string name="scroll_capture_started">Scroll capture started, don\'t touch the screen</string>
+    <string name="scroll_capture_scroll">Scroll</string>
+    <string name="scroll_capture_done">Done</string>
+    <string name="scroll_capture_stop">Stop</string>
     <string name="scroll_capture_saved">Scroll screenshot saved</string>
     <string name="scroll_capture_nothing">Nothing to scroll on this screen</string>
     <string name="scroll_capture_failed">Scroll capture failed</string>

@@ -57,7 +57,8 @@ import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
  * platform "Capture more" chip (which only shows up for apps that implement
  * scroll capture): it dismisses the shelf and runs [AutoScrollCapture], which
  * scrolls the app itself and stitches the frames, like Samsung's scroll
- * capture.
+ * capture - one page per tap on its floating "Scroll" button, or by itself
+ * until "Stop" / a tap on the screen when manual mode is off.
  */
 @SystemUIModPack
 @ChildProcessModPack(processNameContains = "screenshot")
@@ -79,6 +80,7 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 	private var ScreenshotDeleteSharedDelay = 60
 	private var ScreenshotAutoScroll = false
 	private var ScreenshotAutoScrollMaxSteps = 10
+	private var ScreenshotAutoScrollManual = true
 
 	/** SystemUI's ImageCaptureImpl, the display capture the screenshot itself uses. */
 	private var imageCapture: Any? = null
@@ -94,6 +96,7 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 		ScreenshotDeleteSharedDelay = Xprefs.getSliderInt("ScreenshotDeleteSharedDelay", 60)
 		ScreenshotAutoScroll = Xprefs.getBoolean("ScreenshotAutoScroll", false)
 		ScreenshotAutoScrollMaxSteps = Xprefs.getSliderInt("ScreenshotAutoScrollMaxSteps", 10)
+		ScreenshotAutoScrollManual = Xprefs.getBoolean("ScreenshotAutoScrollManual", true)
 	}
 
 	override fun onPackageLoaded(PRParam: XposedModuleInterface.PackageReadyParam) {
@@ -279,7 +282,13 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 		}
 		mainHandler.postDelayed({
 			try {
-				AutoScrollCapture(mContext, capture, displayId, ScreenshotAutoScrollMaxSteps.coerceAtLeast(1)).start()
+				AutoScrollCapture(
+					mContext,
+					capture,
+					displayId,
+					ScreenshotAutoScrollMaxSteps.coerceAtLeast(1),
+					ScreenshotAutoScrollManual,
+				).start()
 			} catch (t: Throwable) {
 				AutoScrollCapture.running = false
 				log(t)
