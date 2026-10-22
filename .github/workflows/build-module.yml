@@ -7,7 +7,8 @@ name: Build KernelSU module
 # commit carrying the zip and the APK. Flashing the zip also installs the APK
 # (MagiskModBase/customize.sh).
 #
-# Needs no secrets: without SIGNING_KEY the APK is signed with a CI key that
+# Signs with the shared key (KEYSTORE_BASE64, STORE_PASSWORD, KEY_ALIAS,
+# KEY_PASSWORD, synced by mtt0000/shared-workflows). Without KEYSTORE_BASE64 the APK is signed with a CI key that
 # is cached between runs, so consecutive builds can update each other.
 
 on:
@@ -30,7 +31,7 @@ jobs:
       contents: write
 
     env:
-      HAS_SIGNING_KEY: ${{ secrets.SIGNING_KEY != '' }}
+      HAS_SIGNING_KEY: ${{ secrets.KEYSTORE_BASE64 != '' }}
 
     steps:
     - name: Source Code Download
@@ -79,9 +80,9 @@ jobs:
 
     - name: Signing setup
       env:
-        SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
-        ALIAS: ${{ secrets.ALIAS }}
+        SIGNING_KEY: ${{ secrets.KEYSTORE_BASE64 }}
+        KEY_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
       run: |
         if [ -n "$SIGNING_KEY" ]; then
@@ -92,7 +93,7 @@ jobs:
             echo "keyPassword=$KEY_PASSWORD"
             echo "storeFile=$GITHUB_WORKSPACE/ReleaseKey.jks"
           } > ReleaseKey.properties
-          echo "SIGNING=release key (SIGNING_KEY secret)" >> "$GITHUB_ENV"
+          echo "SIGNING=shared release key (KEYSTORE_BASE64 secret)" >> "$GITHUB_ENV"
         else
           KS="$HOME/.pxn-ci/ci-release.jks"
           if [ ! -f "$KS" ]; then
@@ -109,7 +110,7 @@ jobs:
             echo "keyPassword=pxn-ci-key"
             echo "storeFile=$KS"
           } > ReleaseKey.properties
-          echo "SIGNING=CI key from the Actions cache (no SIGNING_KEY secret)" >> "$GITHUB_ENV"
+          echo "SIGNING=CI key from the Actions cache (no KEYSTORE_BASE64 secret)" >> "$GITHUB_ENV"
         fi
 
     # versionCode = the committed one + this workflow's run number, so every
