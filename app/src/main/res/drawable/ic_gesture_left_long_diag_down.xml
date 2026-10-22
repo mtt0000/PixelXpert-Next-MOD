@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated: edge gesture icon (edge bar + finger stroke). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+	android:width="24dp"
+	android:height="24dp"
+	android:viewportWidth="24"
+	android:viewportHeight="24">
+	<path
+		android:fillColor="#FF000000"
+		android:pathData="M1.5,3 H3.5 V21 H1.5 Z" />
+	<path
+		android:strokeColor="#FF000000"
+		android:strokeWidth="2"
+		android:strokeLineCap="round"
+		android:strokeLineJoin="round"
+		android:pathData="M5,4 L20,19 M20,19 L19.65,15.02 M20,19 L16.02,18.65 M17.53,16.53 L17.18,12.54 M17.53,16.53 L13.54,16.18" />
+</vector>

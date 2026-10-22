@@ -844,4 +844,7 @@
     <string name="autobackup_found_text">This install has no PixelXpert settings yet, as happens after the app data is lost. An automatic backup from %1$s with %2$d settings is in %3$s. Restore it?</string>
     <string name="autobackup_restore">Restore</string>
     <string name="autobackup_keep">Keep current settings</string>
+    <string name="edge_side_nav_summary">Gestures, pull and slide and the system back gesture</string>
+    <string name="edge_bottom_nav_summary">Gestures and pull and slide</string>
+    <string name="back_gesture_on_edge_title">System back gesture on this edge</string>
 </resources>

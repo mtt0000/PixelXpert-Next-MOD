@@ -777,4 +777,7 @@
     <string name="autobackup_found_text">PixelXpert non ha ancora le sue impostazioni, come succede dopo una perdita dei dati. In %3$s c\'è un backup automatico del %1$s con %2$d impostazioni. Vuoi ripristinarlo?</string>
     <string name="autobackup_restore">Ripristina</string>
     <string name="autobackup_keep">Mantieni le impostazioni attuali</string>
+    <string name="edge_side_nav_summary">Gesti, tira e scorri e gesto Indietro di sistema</string>
+    <string name="edge_bottom_nav_summary">Gesti e tira e scorri</string>
+    <string name="back_gesture_on_edge_title">Gesto Indietro di sistema su questo bordo</string>
 </resources>
