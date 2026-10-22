@@ -97,6 +97,15 @@ jobs:
         # only mustRunAfter assembleRelease, so both are named explicitly.
         ./gradlew --no-configuration-cache incrementCanaryVersion assembleRelease createZip -Pchannel=canary
 
+    - name: Check generated mod-pack registry
+      run: |
+        REG=$(find app/build/generated/ksp/release -name 'ModPacks.kt' | head -n 1)
+        test -n "$REG" || { echo "::error::ModPacks.kt not generated"; exit 1; }
+        grep -n "launcher\." "$REG"
+        for pack in KillAppMod HideAppMod ClearAllButtonMod; do
+          grep -q "$pack" "$REG" || { echo "::error::$pack missing from $REG"; exit 1; }
+        done
+
     - name: Validate module zip
       run: |
         set -e
