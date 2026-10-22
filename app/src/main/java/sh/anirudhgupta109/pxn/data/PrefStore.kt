@@ -293,28 +293,9 @@ class PrefStore(context: Context) {
 	 * people look into and edit.
 	 */
 	fun exportJson(uri: Uri, format: String, include: (String) -> Boolean): Boolean = try {
-		val values = JSONObject()
-		for ((key, value) in prefs.all) {
-			if (!include(key) || value == null) continue
-			val entry = JSONObject()
-			when (value) {
-				is Boolean -> entry.put("t", "b").put("v", value)
-				is Int -> entry.put("t", "i").put("v", value)
-				is Long -> entry.put("t", "l").put("v", value)
-				is Float -> entry.put("t", "f").put("v", value.toDouble())
-				is String -> entry.put("t", "s").put("v", value)
-				is Set<*> -> entry.put("t", "set").put("v", JSONArray(value.filterIsInstance<String>()))
-				else -> continue
-			}
-			values.put(key, entry)
-		}
-		val root = JSONObject()
-			.put("format", format)
-			.put("version", 1)
-			.put("app", BuildConfig.VERSION_NAME)
-			.put("prefs", values)
+		val text = encodeJson(prefs.all, format, include)
 		appContext.contentResolver.openOutputStream(uri)?.use {
-			it.write(root.toString(2).toByteArray())
+			it.write(text.toByteArray())
 			true
 		} ?: false
 	} catch (e: Exception) {
@@ -329,24 +310,10 @@ class PrefStore(context: Context) {
 	 */
 	fun importJson(uri: Uri, format: String, include: (String) -> Boolean): Int = try {
 		val text = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: ""
-		val root = JSONObject(text)
-		if (root.optString("format") != format) {
+		val restored = decodeJson(text, format, include)
+		if (restored == null) {
 			-1
 		} else {
-			val values = root.getJSONObject("prefs")
-			val restored = LinkedHashMap<String, Any?>()
-			for (key in values.keys()) {
-				if (!include(key)) continue
-				val entry = values.getJSONObject(key)
-				restored[key] = when (entry.getString("t")) {
-					"b" -> entry.getBoolean("v")
-					"i" -> entry.getInt("v")
-					"l" -> entry.getLong("v")
-					"f" -> entry.getDouble("v").toFloat()
-					"set" -> entry.getJSONArray("v").let { array -> (0 until array.length()).map { array.getString(it) }.toSet() }
-					else -> entry.getString("v")
-				}
-			}
 			replace(include, restored)
 			restored.size
 		}
@@ -394,6 +361,62 @@ class PrefStore(context: Context) {
 	}
 
 	companion object {
+		/**
+		 * The JSON backup format: every value tagged with its type ("b",
+		 * "i", "l", "f", "s", "set"), so a restore puts back exactly the
+		 * types the widgets and the hooks read.
+		 */
+		fun encodeJson(all: Map<String, *>, format: String, include: (String) -> Boolean): String {
+			val values = JSONObject()
+			for ((key, value) in all) {
+				if (!include(key) || value == null) continue
+				val entry = JSONObject()
+				when (value) {
+					is Boolean -> entry.put("t", "b").put("v", value)
+					is Int -> entry.put("t", "i").put("v", value)
+					is Long -> entry.put("t", "l").put("v", value)
+					is Float -> entry.put("t", "f").put("v", value.toDouble())
+					is String -> entry.put("t", "s").put("v", value)
+					is Set<*> -> entry.put("t", "set").put("v", JSONArray(value.filterIsInstance<String>()))
+					else -> continue
+				}
+				values.put(key, entry)
+			}
+			return JSONObject()
+				.put("format", format)
+				.put("version", 1)
+				.put("app", BuildConfig.VERSION_NAME)
+				.put("time", System.currentTimeMillis())
+				.put("prefs", values)
+				.toString(2)
+		}
+
+		/** The values of an [encodeJson] text of [format]; null when it is not one. */
+		fun decodeJson(text: String, format: String, include: (String) -> Boolean): Map<String, Any?>? = try {
+			val root = JSONObject(text)
+			if (root.optString("format") != format) {
+				null
+			} else {
+				val values = root.getJSONObject("prefs")
+				val restored = LinkedHashMap<String, Any?>()
+				for (key in values.keys()) {
+					if (!include(key)) continue
+					val entry = values.getJSONObject(key)
+					restored[key] = when (entry.getString("t")) {
+						"b" -> entry.getBoolean("v")
+						"i" -> entry.getInt("v")
+						"l" -> entry.getLong("v")
+						"f" -> entry.getDouble("v").toFloat()
+						"set" -> entry.getJSONArray("v").let { array -> (0 until array.length()).map { array.getString(it) }.toSet() }
+						else -> entry.getString("v")
+					}
+				}
+				restored
+			}
+		} catch (e: Exception) {
+			null
+		}
+
 		/** On-disk initialisation marker; carries no meaning in this app. */
 		const val LEGACY_INIT_MARKER = "IsPrefsInitiated"
 

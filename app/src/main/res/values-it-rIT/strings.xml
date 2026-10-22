@@ -773,4 +773,8 @@
     <string name="edge_icon_fg_title">Colore dell\'icona</string>
     <string name="edge_diagonal_range_title">Mostra l\'area diagonale</string>
     <string name="edge_diagonal_range_summary">Evidenzia il settore in cui deve restare uno swipe diagonale mentre il dito è al suo interno</string>
+    <string name="autobackup_found_title">Trovato un backup automatico</string>
+    <string name="autobackup_found_text">PixelXpert non ha ancora le sue impostazioni, come succede dopo una perdita dei dati. In %3$s c\'è un backup automatico del %1$s con %2$d impostazioni. Vuoi ripristinarlo?</string>
+    <string name="autobackup_restore">Ripristina</string>
+    <string name="autobackup_keep">Mantieni le impostazioni attuali</string>
 </resources>

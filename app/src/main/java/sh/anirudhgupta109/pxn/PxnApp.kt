@@ -20,6 +20,7 @@ import sh.anirudhgupta109.pxn.data.PrefStore
 import sh.anirudhgupta109.pxn.di.pxnModule
 import sh.anirudhgupta109.pxn.service.RootProvider
 import sh.anirudhgupta109.pxn.ui.prefs.syncClipboardShareComponent
+import sh.anirudhgupta109.pxn.util.AutoBackup
 
 /**
  * Application entry point for the standalone Compose rewrite.
@@ -61,6 +62,7 @@ class PxnApp : android.app.Application() {
 		// write to ACTION_USER_UNLOCKED instead of throwing out of onCreate.
 		PrefStore.markReady(this)
 		syncClipboardShareComponent(this)
+		AutoBackup.start(this)
 
 		createNotificationChannel()
 		bindXposedService()

@@ -840,4 +840,8 @@
     <string name="edge_icon_fg_title">Icon color</string>
     <string name="edge_diagonal_range_title">Show the diagonal range</string>
     <string name="edge_diagonal_range_summary">Shades the sector a diagonal swipe has to stay in while the finger is in it</string>
+    <string name="autobackup_found_title">Automatic backup found</string>
+    <string name="autobackup_found_text">This install has no PixelXpert settings yet, as happens after the app data is lost. An automatic backup from %1$s with %2$d settings is in %3$s. Restore it?</string>
+    <string name="autobackup_restore">Restore</string>
+    <string name="autobackup_keep">Keep current settings</string>
 </resources>

@@ -4,11 +4,13 @@
 #
 # The caller defines pxn_say "<text>" for output and sets PKGNAME.
 #
-# An app that is already installed is always uninstalled and the APK from the
-# zip installed fresh, so a build signed with another key (upstream release,
-# older CI key) can never block the update. Uninstalling deletes the app's
-# data, so its shared_prefs (all the module settings) are copied aside first
-# and put back into the new install.
+# An installed app is first updated in place, which keeps its data and its
+# LSPosed/Vector entry (enabled state and scope). Only when that is refused -
+# a build signed with another key (upstream release, older CI key) - is it
+# uninstalled and the APK from the zip installed fresh. Uninstalling deletes
+# the app's data, so its shared_prefs (all the module settings) are copied
+# aside first and put back into the new install. PXN_REINSTALLED tells the
+# caller which of the two happened.
 
 PXN_DE_DIR="/data/user_de/0/$PKGNAME"
 PXN_CE_DIR="/data/user/0/$PKGNAME"
@@ -101,7 +103,20 @@ pxnInstallApk()
 # the boot-time retry to restore.
 pxnReinstallApp()
 {
+	PXN_REINSTALLED=0
+	if pxnIsInstalled && pxnInstallApk "$1"; then
+		pxn_say "- App updated in place, settings and LSPosed scope kept"
+		# A backup still waiting from an earlier failed run is restored.
+		if pxnRestoreSettings "$2"; then
+			rm -rf "$2"
+		fi
+		return 0
+	fi
+
 	if pxnIsInstalled; then
+		pxn_say "- In-place update refused (different signature?)"
+		pxn_say "  pm said: $PXN_INSTALL_OUT"
+		PXN_REINSTALLED=1
 		# A backup still waiting for its restore is the older, real one.
 		if [ ! -d "$2" ]; then
 			pxnBackupSettings "$2"
