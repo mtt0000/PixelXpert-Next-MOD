@@ -651,9 +651,10 @@
     <string name="hook_audit_waiting_desc">Ensure the module is enabled in LSPosed, target apps are selected in scope, and they have been restarted. Tap Refresh to request audit. A SystemUI restart might be needed!</string>
 
     <!--Custom Settings (added by the hide/kill/clipboard feature set)-->
-    <string name="custom_header">Custom Settings</string>
-    <string name="custom_header_summary">Clipboard share target, Recents buttons and hidden apps</string>
+    <string name="custom_header">Other Settings</string>
+    <string name="custom_header_summary">Clipboard share target, screenshots, Recents buttons and hidden apps</string>
     <string name="custom_share_category">Share sheet</string>
+    <string name="custom_screenshot_category">Screenshots</string>
     <string name="custom_recents_category">Recents</string>
     <string name="clipboard_share_title">Copy to clipboard from the share sheet</string>
     <string name="clipboard_share_summary">Adds a \"Copy content in clipboard\" target to the Android share sheet. Works with text, text files and images</string>
