@@ -349,8 +349,27 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 		}
 
 		val target = if (alpha > 0.05f) View.VISIBLE else View.GONE
+		if (target == View.VISIBLE) {
+			// The navigation bar can change (gestures / 3 buttons, rotation).
+			val params = button.layoutParams as? FrameLayout.LayoutParams
+			val margin = emptyStateBottomMargin(button.parent as? View ?: recents)
+			if (params != null && params.bottomMargin != margin) {
+				params.bottomMargin = margin
+				button.layoutParams = params
+			}
+		}
 		if (button.visibility != target) button.visibility = target
 		if (target == View.VISIBLE && kotlin.math.abs(button.alpha - alpha) > 0.01f) button.alpha = alpha
+	}
+
+	/** Navigation bar height plus a 32dp gap. */
+	private fun emptyStateBottomMargin(view: View): Int {
+		val navBar = try {
+			view.rootWindowInsets?.getInsets(android.view.WindowInsets.Type.navigationBars())?.bottom ?: 0
+		} catch (ignored: Throwable) {
+			0
+		}
+		return navBar + RecentsTaskTools.dp(view.context, 32f)
 	}
 
 	/** Opacity of Recents' content: its own alpha (and its parents') times its content alpha. */
@@ -396,8 +415,8 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 
 	/**
 	 * The empty-state button goes into Recents' parent (the launcher's drag
-	 * layer), centred and a little below the middle, where Recents draws its
-	 * "no recent items" message.
+	 * layer), at the bottom centre: where the actions bar sits when there are
+	 * cards, clear of the navigation bar.
 	 */
 	private fun addEmptyStateButton(recents: ViewGroup) {
 		if (emptyStateButton != null) return
@@ -411,8 +430,8 @@ class HideAppMod(context: Context) : XposedModPack(context), TaskButtonsHost.Pro
 		val button = RecentsTaskTools.createRoundButton(ctx, R.drawable.ic_manage_hidden, TaskButtonsHost.TAG_PREFIX + "manage_empty", 14)
 		val size = RecentsTaskTools.dp(ctx, 56f)
 		val params = FrameLayout.LayoutParams(size, size)
-		params.gravity = Gravity.CENTER
-		params.topMargin = RecentsTaskTools.dp(ctx, 120f)
+		params.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+		params.bottomMargin = emptyStateBottomMargin(parent)
 		button.elevation = RecentsTaskTools.dp(ctx, 8f).toFloat()
 		button.contentDescription = RecentsTaskTools.moduleString(R.string.hidden_apps_title)
 		button.setOnClickListener { showManageDialog(it.context) }
