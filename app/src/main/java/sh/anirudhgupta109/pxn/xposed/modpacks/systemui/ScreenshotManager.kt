@@ -5,20 +5,14 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.drawable.Drawable
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.UserManager
-import android.view.Display
-import androidx.core.content.res.ResourcesCompat
-import de.robv.android.xposed.XposedHelpers.callMethod
-import de.robv.android.xposed.XposedHelpers.getIntField
 import de.robv.android.xposed.XposedHelpers.getObjectField
 import de.robv.android.xposed.XposedHelpers.setObjectField
 import io.github.libxposed.api.XposedModuleInterface
-import java.lang.reflect.Proxy
 import java.util.Locale
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
@@ -27,7 +21,6 @@ import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 import sh.anirudhgupta109.pxn.R
 import sh.anirudhgupta109.pxn.annotations.ChildProcessModPack
-import sh.anirudhgupta109.pxn.xposed.XPLauncher
 import sh.anirudhgupta109.pxn.xposed.XPrefs.Xprefs
 import sh.anirudhgupta109.pxn.xposed.XposedModPack
 import sh.anirudhgupta109.pxn.xposed.annotations.SystemUIModPack
@@ -52,6 +45,9 @@ import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
  * file - and the MediaStore entry is deleted after a grace period, because the
  * receiving app reads the URI after the chooser has closed.
  *
+ * "delete button" puts a trash button on the shelf that deletes the
+ * screenshot right away. Both buttons are added by [ScreenshotShelfButtons].
+ *
  * "auto-scroll capture" adds a button to the screenshot shelf, next to the
  * platform "Capture more" chip (which only shows up for apps that implement
  * scroll capture): it dismisses the shelf and runs [AutoScrollCapture], which
@@ -69,8 +65,6 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 		private const val ACTION_SCREENSHOT_SHARED = "sh.anirudhgupta109.pxn.SCREENSHOT_SHARED"
 		private const val EXTRA_SHARED_URI = "pxn_shared_uri"
 
-		/** WindowManager.TAKE_SCREENSHOT_PROVIDED_IMAGE, hidden. */
-		private const val TAKE_SCREENSHOT_PROVIDED_IMAGE = 3
 		private const val SHELF_DISMISS_DELAY = 400L
 	}
 
@@ -80,6 +74,8 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 	private var ScreenshotAutoScroll = false
 	private var ScreenshotAutoScrollMaxSteps = 10
 	private var ScreenshotAutoScrollManual = true
+
+	private val shelfButtons = ScreenshotShelfButtons(context) { displayId -> onAutoScrollClicked(displayId) }
 
 	/** SystemUI's ImageCaptureImpl, the display capture the screenshot itself uses. */
 	private var imageCapture: Any? = null
@@ -92,10 +88,14 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 		disableScreenshotSound = Xprefs.getBoolean("disableScreenshotSound", false)
 		ScreenshotChordInsecure = Xprefs.getBoolean("ScreenshotChordInsecure", false)
 		ScreenshotDeleteShared = Xprefs.getBoolean("ScreenshotDeleteShared", false)
-		ScreenshotDeleteSharedDelay = Xprefs.getSliderInt("ScreenshotDeleteSharedDelay", 60)
 		ScreenshotAutoScroll = Xprefs.getBoolean("ScreenshotAutoScroll", false)
-		ScreenshotAutoScrollMaxSteps = Xprefs.getSliderInt("ScreenshotAutoScrollMaxSteps", 10)
 		ScreenshotAutoScrollManual = Xprefs.getBoolean("ScreenshotAutoScrollManual", true)
+		shelfButtons.autoScrollEnabled = ScreenshotAutoScroll
+		shelfButtons.deleteEnabled = Xprefs.getBoolean("ScreenshotDeleteButton", false)
+		// Sliders last and guarded: XPLauncher swallows an exception here, which
+		// would leave every key read after it at its default.
+		ScreenshotDeleteSharedDelay = runCatching { Xprefs.getSliderInt("ScreenshotDeleteSharedDelay", 60) }.getOrDefault(60)
+		ScreenshotAutoScrollMaxSteps = runCatching { Xprefs.getSliderInt("ScreenshotAutoScrollMaxSteps", 10) }.getOrDefault(10)
 	}
 
 	override fun onPackageLoaded(PRParam: XposedModuleInterface.PackageReadyParam) {
@@ -157,30 +157,7 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 			.afterConstruction()
 			.run { param -> imageCapture = param.thisObject }
 
-		// One ActionsCallback is built per screenshot, inside
-		// ScreenshotActionsController.setCurrentScreenshot and right before the
-		// actions provider adds the stock buttons through it. Hooking its
-		// constructor instead of setCurrentScreenshot / ScreenshotViewModel.addAction
-		// survives R8 on Pixel builds, where those single-caller methods can be
-		// inlined away; provideActionButton is called by every provider, so it stays.
-		// The post puts the button after the stock ones.
-		val actionsCallbackClass = ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ScreenshotActionsController\$ActionsCallback")
-		if (actionsCallbackClass.clazz == null || imageCaptureClass.clazz == null) {
-			log("PXN ScrollCapture: ActionsCallback found: ${actionsCallbackClass.clazz != null}, ImageCaptureImpl found: ${imageCaptureClass.clazz != null}")
-		}
-		actionsCallbackClass
-			.afterConstruction()
-			.run { param ->
-				if (!ScreenshotAutoScroll) return@run
-				val callback = param.thisObject ?: return@run
-				mainHandler.post {
-					try {
-						addAutoScrollButton(callback)
-					} catch (t: Throwable) {
-						log("PXN ScrollCapture: could not add the button", t)
-					}
-				}
-			}
+		shelfButtons.hook()
 
 		//17 - much easier approach: killing mediaplayer totally
 		ReflectedClass.of(MediaPlayer::class.java)
@@ -218,89 +195,13 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 			}
 	}
 
-	private fun addAutoScrollButton(callback: Any) {
-		val controller = runCatching { getObjectField(callback, "this\$0") }.getOrNull()
-		// The provider of this screenshot holds its request (ScreenshotData).
-		val provider = runCatching {
-			val id = getObjectField(callback, "screenshotId")
-			(getObjectField(controller, "actionProviders") as Map<*, *>)[id]
-		}.getOrNull()
-		val screenshot = runCatching { getObjectField(provider, "request") }.getOrNull()
-
-		// A provided image (an app handing SystemUI a bitmap) has nothing on screen to scroll.
-		val type = runCatching { getIntField(screenshot, "type") }.getOrDefault(-1)
-		if (type == TAKE_SCREENSHOT_PROVIDED_IMAGE) return
-		val displayId = runCatching { getIntField(screenshot, "displayId") }.getOrDefault(Display.DEFAULT_DISPLAY)
-
-		// provideActionButton(appearance, showDuringEntrance, onClick: () -> Unit)
-		val provideActionButton = callback.javaClass.declaredMethods.firstOrNull { it.name == "provideActionButton" }
-			?: callback.javaClass.declaredMethods.first {
-				val types = it.parameterTypes
-				types.size == 3 && types[1] == Boolean::class.javaPrimitiveType && types[2].name == "kotlin.jvm.functions.Function0"
-			}
-		provideActionButton.isAccessible = true
-		val loader = callback.javaClass.classLoader
-
-		val onClick = Proxy.newProxyInstance(loader, arrayOf(provideActionButton.parameterTypes[2])) { proxy, method, args ->
-			when (method.name) {
-				"invoke" -> {
-					onAutoScrollClicked(controller, provider, displayId)
-					Class.forName("kotlin.Unit", false, loader).getField("INSTANCE").get(null)
-				}
-				"equals" -> proxy === args?.getOrNull(0)
-				"hashCode" -> System.identityHashCode(proxy)
-				else -> "PXN auto-scroll capture"
-			}
-		}
-		val id = provideActionButton.invoke(callback, autoScrollAppearance(provideActionButton.parameterTypes[0]), true, onClick)
-		log("PXN ScrollCapture: button added (id $id, display $displayId)")
-	}
-
-	/**
-	 * `ActionButtonAppearance(icon, label, description, tint = true, ...)`: the
-	 * shortest constructor wins (the @JvmOverloads one), extra parameters get
-	 * the Kotlin defaults.
-	 */
-	private fun autoScrollAppearance(appearanceClass: Class<*>): Any {
-		val res = XPLauncher.moduleResources!!
-		val icon = ResourcesCompat.getDrawable(res, R.drawable.ic_scroll_capture, mContext.theme)
-		val label = res.getString(R.string.scroll_capture_label)
-		val constructor = appearanceClass.constructors
-			.filter { ctor ->
-				val types = ctor.parameterTypes
-				types.size >= 3 &&
-					types[0] == Drawable::class.java &&
-					types[1] == CharSequence::class.java &&
-					types[2] == CharSequence::class.java
-			}
-			.minBy { it.parameterTypes.size }
-		val args = constructor.parameterTypes.mapIndexed { index, type ->
-			when {
-				index == 0 -> icon
-				index == 1 || index == 2 -> label
-				type == Boolean::class.javaPrimitiveType -> true
-				type == Int::class.javaPrimitiveType -> 0
-				else -> null
-			}
-		}
-		return constructor.newInstance(*args.toTypedArray())
-	}
-
-	private fun onAutoScrollClicked(controller: Any?, provider: Any?, displayId: Int) {
+	/** The shelf is already being dismissed by [ScreenshotShelfButtons]; it has to be gone before the first frame. */
+	private fun onAutoScrollClicked(displayId: Int) {
 		val capture = imageCapture
 		if (capture == null) log("PXN ScrollCapture: ImageCaptureImpl instance not captured, capturing directly")
 		if (AutoScrollCapture.running) return
 		AutoScrollCapture.running = true
 
-		// The shelf has to be gone before the first frame is captured; the injected
-		// swipes would dismiss it anyway, as a touch outside.
-		try {
-			val executor = runCatching { getObjectField(controller, "actionExecutor") }.getOrNull()
-				?: getObjectField(provider, "actionExecutor")
-			callMethod(getObjectField(executor, "viewProxy"), "requestDismissal", *arrayOf<Any?>(null))
-		} catch (t: Throwable) {
-			log("PXN ScrollCapture: could not dismiss the shelf", t)
-		}
 		mainHandler.postDelayed({
 			try {
 				AutoScrollCapture(

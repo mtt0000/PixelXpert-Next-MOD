@@ -20,6 +20,7 @@ object SystemUIInspector {
 		val lockscreenItems = mutableListOf<TargetAuditItem>()
 		val gesturesItems = mutableListOf<TargetAuditItem>()
 		val powerVolumeItems = mutableListOf<TargetAuditItem>()
+		val screenshotItems = mutableListOf<TargetAuditItem>()
 
 		// ==========================================
 		// 1. STATUS BAR MODULE
@@ -714,6 +715,32 @@ object SystemUIInspector {
 		}
 		powerVolumeItems.add(volumeDialog)
 
+		// ==========================================
+		// SCREENSHOTS (ScreenshotManager / ScreenshotShelfButtons /
+		// AutoScrollCapture). They run in the `:screenshot` process, which loads
+		// the same SystemUI APK, so this classloader answers for it too.
+		// ==========================================
+		val screenshotPackage = "com.android.systemui.screenshot"
+		val actionsCallback = "$screenshotPackage.ScreenshotActionsController\$ActionsCallback"
+		val viewModel = "$screenshotPackage.ui.viewmodel.ScreenshotViewModel"
+		screenshotItems.add(InspectionUtils.checkClass(classLoader, actionsCallback, "ActionsCallback (shelf buttons, route 1)"))
+		screenshotItems.add(InspectionUtils.checkMethod(classLoader, actionsCallback, "provideActionButton", "ActionsCallback#provideActionButton"))
+		screenshotItems.add(InspectionUtils.checkField(classLoader, actionsCallback, "screenshotId", "ActionsCallback.screenshotId"))
+		screenshotItems.add(InspectionUtils.checkField(classLoader, "$screenshotPackage.ScreenshotActionsController", "actionProviders", "ScreenshotActionsController.actionProviders"))
+		screenshotItems.add(InspectionUtils.checkField(classLoader, "$screenshotPackage.ScreenshotActionsController", "actionExecutor", "ScreenshotActionsController.actionExecutor"))
+		screenshotItems.add(InspectionUtils.checkClass(classLoader, viewModel, "ScreenshotViewModel (shelf buttons, route 2)"))
+		screenshotItems.add(InspectionUtils.checkField(classLoader, viewModel, "_actions", "ScreenshotViewModel._actions"))
+		screenshotItems.add(InspectionUtils.checkMethod(classLoader, viewModel, "addAction", "ScreenshotViewModel#addAction"))
+		screenshotItems.add(InspectionUtils.checkClass(classLoader, "$screenshotPackage.ui.viewmodel.ActionButtonViewModel", "ActionButtonViewModel"))
+		screenshotItems.add(InspectionUtils.checkClass(classLoader, "$screenshotPackage.ui.viewmodel.ActionButtonAppearance", "ActionButtonAppearance"))
+		screenshotItems.add(InspectionUtils.checkClass(classLoader, "$screenshotPackage.ScreenshotSavedResult", "ScreenshotSavedResult (saved uri)"))
+		screenshotItems.add(InspectionUtils.checkField(classLoader, "$screenshotPackage.ActionExecutor", "viewProxy", "ActionExecutor.viewProxy (dismiss)"))
+		screenshotItems.add(InspectionUtils.checkMethod(classLoader, "$screenshotPackage.ScreenshotShelfViewProxy", "requestDismissal", "ScreenshotShelfViewProxy#requestDismissal"))
+		screenshotItems.add(InspectionUtils.checkMethod(classLoader, "$screenshotPackage.ImageCaptureImpl", "captureDisplay", "ImageCaptureImpl#captureDisplay (scroll capture)"))
+		screenshotItems.add(InspectionUtils.checkClass(classLoader, "android.window.ScreenCaptureInternal", "ScreenCaptureInternal (direct capture)"))
+		screenshotItems.add(InspectionUtils.checkClass(classLoader, "com.android.systemui.shared.system.InputMonitorCompat", "InputMonitorCompat (tap to stop)"))
+		screenshotItems.add(InspectionUtils.checkMethod(classLoader, "$screenshotPackage.ActionIntentCreator", "createShareWithSubject", "ActionIntentCreator#createShareWithSubject (delete shared)"))
+
 		val modules = listOf(
 			ModuleAuditResult(
 				moduleName = "Status Bar",
@@ -744,6 +771,12 @@ object SystemUIInspector {
 				packageName = Constants.SYSTEM_UI_PACKAGE,
 				pipelineSummary = "Global Actions & Volume Dialog Pipeline",
 				items = powerVolumeItems,
+			),
+			ModuleAuditResult(
+				moduleName = "Screenshots",
+				packageName = Constants.SYSTEM_UI_PACKAGE,
+				pipelineSummary = "Screenshot shelf buttons, scroll capture and shared-screenshot cleanup",
+				items = screenshotItems,
 			),
 		)
 

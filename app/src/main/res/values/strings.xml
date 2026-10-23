@@ -319,6 +319,11 @@
     <string name="screenshot_delete_shared_summary">Screenshots shared from the screenshot toolbar are removed from the gallery instead of being kept. Cancelling the share sheet keeps the screenshot</string>
     <string name="screenshot_delete_shared_delay_title">Delete shared screenshots after (seconds)</string>
     <string name="screenshot_delete_shared_delay_summary">Time the receiving app gets to read the screenshot before it is deleted</string>
+    <string name="screenshot_delete_button_title">Delete button</string>
+    <string name="screenshot_delete_button_summary">Adds a trash button to the screenshot toolbar that deletes the screenshot right away</string>
+    <string name="screenshot_delete_label">Delete</string>
+    <string name="screenshot_deleted">Screenshot deleted</string>
+    <string name="screenshot_delete_failed">Could not delete the screenshot</string>
     <string name="screenshot_auto_scroll_title">Auto-scroll capture</string>
     <string name="screenshot_auto_scroll_summary">Adds an \"Auto-scroll\" button to the screenshot toolbar that scrolls the app by itself and stitches a long screenshot, also in apps where \"Capture more\" is not available</string>
     <string name="screenshot_auto_scroll_manual_title">Scroll by tapping the button</string>

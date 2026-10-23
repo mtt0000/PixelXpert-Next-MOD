@@ -581,6 +581,11 @@
     <string name="screenshot_delete_shared_summary">Gli screenshot condivisi dalla barra degli screenshot vengono rimossi dalla galleria. Se chiudi il menu Condividi lo screenshot resta</string>
     <string name="screenshot_delete_shared_delay_title">Elimina gli screenshot condivisi dopo (secondi)</string>
     <string name="screenshot_delete_shared_delay_summary">Tempo che l\'app di destinazione ha per leggere lo screenshot prima che venga eliminato</string>
+    <string name="screenshot_delete_button_title">Pulsante elimina</string>
+    <string name="screenshot_delete_button_summary">Aggiunge alla barra degli screenshot un pulsante cestino che elimina subito lo screenshot</string>
+    <string name="screenshot_delete_label">Elimina</string>
+    <string name="screenshot_deleted">Screenshot eliminato</string>
+    <string name="screenshot_delete_failed">Impossibile eliminare lo screenshot</string>
     <string name="screenshot_auto_scroll_title">Screenshot a scorrimento automatico</string>
     <string name="screenshot_auto_scroll_summary">Aggiunge alla barra degli screenshot un pulsante \"Scorri\" che fa scorrere l\'app da solo e crea uno screenshot lungo, anche dove \"Cattura di più\" non è disponibile</string>
     <string name="screenshot_auto_scroll_manual_title">Scorri toccando il pulsante</string>

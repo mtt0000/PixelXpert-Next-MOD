@@ -190,6 +190,7 @@ val preferenceDefaults: Map<String, String?> = mapOf(
 	"ScreenshotAutoScrollManual" to "true",
 	"ScreenshotAutoScrollMaxSteps" to "10",
 	"ScreenshotChordInsecure" to "false",
+	"ScreenshotDeleteButton" to "false",
 	"ScreenshotDeleteShared" to "false",
 	"ScreenshotDeleteSharedDelay" to "60",
 	"SegmentorAI" to "0",
