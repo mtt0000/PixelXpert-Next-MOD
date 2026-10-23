@@ -136,11 +136,11 @@ class ScreenshotShelfButtons(
 			?: throw IllegalStateException("no provideActionButton among ${signatures(callback.javaClass.declaredMethods.toList())}")
 		provide.isAccessible = true
 
-		if (withAutoScroll) {
-			provide.invoke(callback, *fillArgs(provide, R.drawable.ic_scroll_capture, R.string.scroll_capture_label, 0) { autoScrollClicked() })
-		}
 		if (deleteEnabled) {
 			provide.invoke(callback, *fillArgs(provide, R.drawable.ic_delete_screenshot, R.string.screenshot_delete_label, 0) { deleteClicked() })
+		}
+		if (withAutoScroll) {
+			provide.invoke(callback, *fillArgs(provide, R.drawable.ic_scroll_capture, R.string.scroll_capture_label, 0) { autoScrollClicked() })
 		}
 	}
 
@@ -164,11 +164,11 @@ class ScreenshotShelfButtons(
 		constructor.isAccessible = true
 
 		val added = ArrayList<Any?>(current)
-		if (withAutoScroll) {
-			added += constructor.newInstance(*fillArgs(constructor, R.drawable.ic_scroll_capture, R.string.scroll_capture_label, nextDirectId++) { autoScrollClicked() })
-		}
 		if (deleteEnabled) {
 			added += constructor.newInstance(*fillArgs(constructor, R.drawable.ic_delete_screenshot, R.string.screenshot_delete_label, nextDirectId++) { deleteClicked() })
+		}
+		if (withAutoScroll) {
+			added += constructor.newInstance(*fillArgs(constructor, R.drawable.ic_scroll_capture, R.string.scroll_capture_label, nextDirectId++) { autoScrollClicked() })
 		}
 		callMethod(flow, "setValue", added)
 	}
