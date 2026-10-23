@@ -723,6 +723,7 @@ object SystemUIInspector {
 		val screenshotPackage = "com.android.systemui.screenshot"
 		val actionsCallback = "$screenshotPackage.ScreenshotActionsController\$ActionsCallback"
 		val viewModel = "$screenshotPackage.ui.viewmodel.ScreenshotViewModel"
+		screenshotItems.add(InspectionUtils.checkMethod(classLoader, "$screenshotPackage.ScreenshotController", "handleScreenshot", "ScreenshotController#handleScreenshot (shelf buttons hook)"))
 		screenshotItems.add(InspectionUtils.checkClass(classLoader, actionsCallback, "ActionsCallback (shelf buttons, route 1)"))
 		screenshotItems.add(InspectionUtils.checkMethod(classLoader, actionsCallback, "provideActionButton", "ActionsCallback#provideActionButton"))
 		screenshotItems.add(InspectionUtils.checkField(classLoader, actionsCallback, "screenshotId", "ActionsCallback.screenshotId"))

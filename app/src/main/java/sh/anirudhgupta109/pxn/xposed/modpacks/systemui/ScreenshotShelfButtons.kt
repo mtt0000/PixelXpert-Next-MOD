@@ -10,7 +10,9 @@ import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import de.robv.android.xposed.XposedHelpers.callMethod
 import de.robv.android.xposed.XposedHelpers.getObjectField
+import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
+import java.util.UUID
 import sh.anirudhgupta109.pxn.R
 import sh.anirudhgupta109.pxn.xposed.XPLauncher
 import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
@@ -20,17 +22,18 @@ import sh.anirudhgupta109.pxn.xposed.utils.toolkit.Logger
  * Extra buttons on the screenshot shelf ("Auto-scroll", "Delete"), for
  * [ScreenshotManager], which runs in SystemUI's `screenshot` process.
  *
- * Google's SystemUI is shrunk by R8, which may inline single-caller methods
- * such as ScreenshotViewModel.addAction or setCurrentScreenshot away, so the
- * buttons get in by two independent routes:
- *  1. the per-screenshot `ScreenshotActionsController$ActionsCallback`: its
- *     constructor is hooked and provideActionButton - called by every actions
- *     provider, so it stays - is invoked right after;
- *  2. when the screenshot is saved (`ScreenshotSavedResult` constructor), if
- *     route 1 did not add them, they are appended to the `_actions` flow of
- *     the `ScreenshotViewModel` singleton directly.
- * The instances it needs (view model, ActionExecutor) are caught from their
- * constructors. Every step logs with the "PXN ScreenshotButtons:" prefix.
+ * The hook point is `ScreenshotController.handleScreenshot`, a large method
+ * neither R8 nor ART will inline: small constructors such as ActionsCallback's
+ * or ScreenshotSavedResult's are compiled into their callers on Pixel builds
+ * and their hooks never fire. Once it returned, the actions provider of the
+ * new screenshot exists and has added the stock buttons, and the buttons get
+ * in by one of two routes:
+ *  1. the provider's ActionsCallback.provideActionButton, which every
+ *     provider calls, so R8 keeps it;
+ *  2. otherwise, appending ActionButtonViewModels straight to the `_actions`
+ *     flow of the ScreenshotViewModel (whose addAction R8 removed).
+ * The objects are found by field type, not field name, from the controller
+ * down. Every step logs with the "PXN ScreenshotButtons:" prefix.
  */
 class ScreenshotShelfButtons(
 	private val context: Context,
@@ -41,14 +44,12 @@ class ScreenshotShelfButtons(
 
 	private val mainHandler = Handler(Looper.getMainLooper())
 
-	private var viewModel: Any? = null
 	private var actionExecutor: Any? = null
-
-	/** Set by route 1 for the current screenshot, consumed by route 2. */
-	private var addedThroughCallback = false
+	private var provider: Any? = null
 	private var shotStartedAt = 0L
 	private var displayId = 0
 
+	/** From the ScreenshotSavedResult constructor, when that hook fires; the provider's own result comes first. */
 	@Volatile
 	private var savedUri: Uri? = null
 
@@ -58,79 +59,75 @@ class ScreenshotShelfButtons(
 	private var nextDirectId = DIRECT_ID_BASE
 
 	fun hook() {
-		val viewModelClass = ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ui.viewmodel.ScreenshotViewModel")
-		val executorClass = ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ActionExecutor")
-		val callbackClass = ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ScreenshotActionsController\$ActionsCallback")
-		val savedResultClass = ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ScreenshotSavedResult")
+		val controllerClass = ReflectedClass.ofIfPossible("$PKG.ScreenshotController")
+		val savedResultClass = ReflectedClass.ofIfPossible(SAVED_RESULT)
 		Logger.log(
-			"PXN ScreenshotButtons: classes - ScreenshotViewModel ${viewModelClass.clazz != null}, " +
-				"ActionExecutor ${executorClass.clazz != null}, ActionsCallback ${callbackClass.clazz != null}, " +
+			"PXN ScreenshotButtons: classes - ScreenshotController ${controllerClass.clazz != null}, " +
 				"ScreenshotSavedResult ${savedResultClass.clazz != null}",
 		)
 
-		viewModelClass
-			.afterConstruction()
-			.run { param -> viewModel = param.thisObject }
-
-		executorClass
-			.afterConstruction()
-			.run { param -> actionExecutor = param.thisObject }
-
-		callbackClass
-			.afterConstruction()
+		val hooks = controllerClass
+			.after("handleScreenshot")
 			.run { param ->
-				val callback = param.thisObject ?: return@run
-				addedThroughCallback = false
 				shotStartedAt = SystemClock.uptimeMillis()
 				Logger.log("PXN ScreenshotButtons: new screenshot (auto-scroll $autoScrollEnabled, delete $deleteEnabled)")
 				if (!autoScrollEnabled && !deleteEnabled) return@run
-				// After the stock buttons, which the provider adds right after this constructor.
+				val controller = param.thisObject ?: return@run
+				val screenshot = param.args.getOrNull(0)
+				// After whatever else the shelf queues for this screenshot.
 				mainHandler.post {
 					try {
-						addThroughCallback(callback)
-						addedThroughCallback = true
+						addButtons(controller, screenshot)
 					} catch (t: Throwable) {
-						Logger.log("PXN ScreenshotButtons: route 1 (ActionsCallback) failed", t)
+						Logger.log("PXN ScreenshotButtons: could not add the buttons", t)
 					}
 				}
 			}
+		Logger.log("PXN ScreenshotButtons: handleScreenshot hooks: ${hooks.size}")
 
 		savedResultClass
 			.afterConstruction()
 			.run { param ->
 				savedUri = runCatching { getObjectField(param.thisObject, "uri") as Uri }.getOrNull()
 				savedAt = SystemClock.uptimeMillis()
-				Logger.log("PXN ScreenshotButtons: screenshot saved")
-				if (!autoScrollEnabled && !deleteEnabled) return@run
-				mainHandler.post {
-					if (addedThroughCallback) {
-						addedThroughCallback = false
-						return@post
-					}
-					try {
-						addThroughViewModel()
-					} catch (t: Throwable) {
-						Logger.log("PXN ScreenshotButtons: route 2 (ScreenshotViewModel) failed", t)
-					}
-				}
 			}
 	}
 
-	// ------------------------------------------------------------ route 1
+	private fun addButtons(controller: Any, screenshot: Any?) {
+		val actionsController = fieldOfType(controller, "$PKG.ScreenshotActionsController")
+			?: throw IllegalStateException("no ScreenshotActionsController in ${controller.javaClass.name}")
+		actionExecutor = fieldOfType(actionsController, "$PKG.ActionExecutor") ?: fieldOfType(controller, "$PKG.ActionExecutor")
 
-	private fun addThroughCallback(callback: Any) {
-		val controller = runCatching { getObjectField(callback, "this\$0") }.getOrNull()
-		val provider = runCatching {
-			val id = getObjectField(callback, "screenshotId")
-			(getObjectField(controller, "actionProviders") as Map<*, *>)[id]
-		}.getOrNull()
-		val screenshot = runCatching { getObjectField(provider, "request") }.getOrNull()
-		runCatching { getObjectField(controller, "actionExecutor") }.getOrNull()?.let { actionExecutor = it }
+		val providers = fieldOfType(actionsController, Map::class.java.name) as? Map<*, *>
+		val currentId = fieldOfType(actionsController, UUID::class.java.name)
+		provider = providers?.get(currentId)
+		val callback = fieldOfType(provider, ACTIONS_CALLBACK)
 
 		// A provided image (an app handing SystemUI a bitmap) has nothing on screen to scroll.
 		val type = runCatching { getObjectField(screenshot, "type") as Int }.getOrDefault(-1)
 		displayId = runCatching { getObjectField(screenshot, "displayId") as Int }.getOrDefault(0)
+		val withAutoScroll = autoScrollEnabled && type != TAKE_SCREENSHOT_PROVIDED_IMAGE
+		Logger.log(
+			"PXN ScreenshotButtons: provider ${provider?.javaClass?.name}, callback ${callback != null}, " +
+				"executor ${actionExecutor != null}, display $displayId, type $type",
+		)
 
+		if (callback != null) {
+			try {
+				addThroughCallback(callback, withAutoScroll)
+				return
+			} catch (t: Throwable) {
+				Logger.log("PXN ScreenshotButtons: route 1 (ActionsCallback) failed", t)
+			}
+		}
+		val viewModel = fieldOfType(actionsController, "$PKG.ui.viewmodel.ScreenshotViewModel")
+			?: throw IllegalStateException("no ScreenshotViewModel in ScreenshotActionsController")
+		addThroughViewModel(viewModel, withAutoScroll)
+	}
+
+	// ------------------------------------------------------------ route 1
+
+	private fun addThroughCallback(callback: Any, withAutoScroll: Boolean) {
 		// provideActionButton(appearance, showDuringEntrance, onClick: () -> Unit)
 		val provide = callback.javaClass.declaredMethods.firstOrNull { it.name == "provideActionButton" }
 			?: callback.javaClass.declaredMethods.first {
@@ -141,31 +138,23 @@ class ScreenshotShelfButtons(
 		val appearanceClass = provide.parameterTypes[0]
 		val functionClass = provide.parameterTypes[2]
 
-		if (autoScrollEnabled && type != TAKE_SCREENSHOT_PROVIDED_IMAGE) {
+		if (withAutoScroll) {
 			provide.invoke(callback, autoScrollAppearance(appearanceClass), true, function(functionClass) { autoScrollClicked() })
 		}
 		if (deleteEnabled) {
 			provide.invoke(callback, deleteAppearance(appearanceClass), true, function(functionClass) { deleteClicked() })
 		}
-		Logger.log("PXN ScreenshotButtons: buttons added through ActionsCallback (display $displayId)")
+		Logger.log("PXN ScreenshotButtons: buttons added through ActionsCallback")
 	}
 
 	// ------------------------------------------------------------ route 2
 
-	private fun addThroughViewModel() {
-		val vm = viewModel ?: throw IllegalStateException("no ScreenshotViewModel instance")
-		val loader = vm.javaClass.classLoader
-		val flow = getObjectField(vm, "_actions")
+	private fun addThroughViewModel(viewModel: Any, withAutoScroll: Boolean) {
+		val loader = viewModel.javaClass.classLoader
+		val flow = getObjectField(viewModel, "_actions")
 		val current = callMethod(flow, "getValue") as List<*>
-		val ours = setOf(label(R.string.scroll_capture_label), label(R.string.screenshot_delete_label))
-		if (current.any { runCatching { getObjectField(getObjectField(it, "appearance"), "description").toString() in ours }.getOrDefault(false) }) {
-			return
-		}
-		// The screenshot came in without route 1: this is a new one.
-		shotStartedAt = savedAt
-		displayId = 0
 
-		val itemClass = Class.forName("com.android.systemui.screenshot.ui.viewmodel.ActionButtonViewModel", false, loader)
+		val itemClass = Class.forName("$PKG.ui.viewmodel.ActionButtonViewModel", false, loader)
 		// ActionButtonViewModel(appearance, id, visible, showDuringEntrance, onClicked)
 		val constructor = itemClass.constructors.first {
 			val types = it.parameterTypes
@@ -175,7 +164,7 @@ class ScreenshotShelfButtons(
 		val functionClass = constructor.parameterTypes[4]
 
 		val added = ArrayList<Any?>(current)
-		if (autoScrollEnabled) {
+		if (withAutoScroll) {
 			added += constructor.newInstance(autoScrollAppearance(appearanceClass), nextDirectId++, true, true, function(functionClass) { autoScrollClicked() })
 		}
 		if (deleteEnabled) {
@@ -196,11 +185,15 @@ class ScreenshotShelfButtons(
 	private fun deleteClicked() {
 		dismissShelf()
 		val startedAt = shotStartedAt
+		val shotProvider = provider
 		Thread {
 			val deadline = SystemClock.uptimeMillis() + SAVE_WAIT
-			while (savedAt < startedAt && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(50)
-			val uri = savedUri
-			val deleted = uri != null && savedAt >= startedAt && try {
+			var uri = savedUriOf(shotProvider, startedAt)
+			while (uri == null && SystemClock.uptimeMillis() < deadline) {
+				SystemClock.sleep(50)
+				uri = savedUriOf(shotProvider, startedAt)
+			}
+			val deleted = uri != null && try {
 				// SystemUI inserted the row itself, so it may delete it without a consent dialog.
 				context.contentResolver.delete(uri, null, null) > 0
 			} catch (t: Throwable) {
@@ -226,6 +219,37 @@ class ScreenshotShelfButtons(
 	}
 
 	// ------------------------------------------------------------ helpers
+
+	/** The provider's own ScreenshotSavedResult, else the one the constructor hook saw for this screenshot. */
+	private fun savedUriOf(shotProvider: Any?, startedAt: Long): Uri? {
+		val result = fieldOfType(shotProvider, SAVED_RESULT)
+		if (result != null) return runCatching { getObjectField(result, "uri") as Uri }.getOrNull()
+		return if (savedAt >= startedAt) savedUri else null
+	}
+
+	/** First field of [owner] (or its superclasses) whose type is, or implements, [typeName]. */
+	private fun fieldOfType(owner: Any?, typeName: String): Any? {
+		owner ?: return null
+		var clazz: Class<*>? = owner.javaClass
+		while (clazz != null && clazz != Any::class.java) {
+			for (field in clazz.declaredFields) {
+				if (Modifier.isStatic(field.modifiers) || !isOfType(field.type, typeName)) continue
+				field.isAccessible = true
+				return field.get(owner) ?: continue
+			}
+			clazz = clazz.superclass
+		}
+		return null
+	}
+
+	private fun isOfType(type: Class<*>, typeName: String): Boolean {
+		var current: Class<*>? = type
+		while (current != null) {
+			if (current.name == typeName || current.interfaces.any { it.name == typeName }) return true
+			current = current.superclass
+		}
+		return false
+	}
 
 	/** A SystemUI-side kotlin Function0 (other classloader than ours) running [block]. */
 	private fun function(functionClass: Class<*>, block: () -> Unit): Any {
@@ -283,8 +307,6 @@ class ScreenshotShelfButtons(
 		return constructor.newInstance(*args.toTypedArray())
 	}
 
-	private fun label(text: Int): String = XPLauncher.moduleResources?.getString(text) ?: ""
-
 	private fun toast(text: Int) {
 		val message = XPLauncher.moduleResources?.getString(text) ?: return
 		mainHandler.post { Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
@@ -292,6 +314,9 @@ class ScreenshotShelfButtons(
 
 	private companion object {
 		const val FUNCTION0 = "kotlin.jvm.functions.Function0"
+		const val PKG = "com.android.systemui.screenshot"
+		const val ACTIONS_CALLBACK = "$PKG.ScreenshotActionsController\$ActionsCallback"
+		const val SAVED_RESULT = "$PKG.ScreenshotSavedResult"
 
 		/** WindowManager.TAKE_SCREENSHOT_PROVIDED_IMAGE, hidden. */
 		const val TAKE_SCREENSHOT_PROVIDED_IMAGE = 3
