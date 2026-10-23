@@ -302,7 +302,26 @@
     <string name="taskbar_force_disable_title">Force Disabled</string>
     <string name="taskbar_transient_title">Auto hide</string>
     <string name="taskbar_on_launcher_title">Show on home</string>
-    <string name="remap_physical_buttons_title">Remap physical buttons</string>
+    <string name="remap_physical_buttons_title">Physical buttons</string>
+    <string name="key_category_power">Power button</string>
+    <string name="key_category_vol_up">Volume up</string>
+    <string name="key_category_vol_down">Volume down</string>
+    <string name="key_category_combos">Key combinations</string>
+    <string name="key_category_flashlight">Flashlight</string>
+    <string name="key_single_on">Single press - screen on</string>
+    <string name="key_double_on">Double press - screen on</string>
+    <string name="key_long_on">Long press - screen on</string>
+    <string name="key_single_off">Single press - screen off</string>
+    <string name="key_double_off">Double press - screen off</string>
+    <string name="key_long_off">Long press - screen off</string>
+    <string name="key_double_summary">When set, a single press waits a moment for a possible second one</string>
+    <string name="key_combo_power_vol_down">Power + Volume down</string>
+    <string name="key_combo_power_vol_up">Power + Volume up</string>
+    <string name="key_combo_vol_up_down">Volume up + Volume down</string>
+    <string name="key_combo_summary">Press both keys together. Default keeps what Android does (screenshot, mute, accessibility shortcut)</string>
+    <string name="key_action_default">Default (Android)</string>
+    <string name="key_action_nothing">Do nothing</string>
+    <string name="control_flashlight_with_volume_keys_summary">While the flashlight is on, the volume buttons change its brightness</string>
     <string name="taskbar_on_ime_title">Show with keyboard open</string>
 
     <!-- Package manager -->

@@ -57,6 +57,29 @@ import sh.anirudhgupta109.pxn.ui.prefs.node.ActionPref
 const val ACTION_APP_PREFIX = "app:"
 const val ACTION_INTENT_PREFIX = "intent:"
 
+/** Key mode: Android's own behaviour, and swallowing the key. */
+const val KEY_ACTION_DEFAULT = "-1"
+const val KEY_ACTION_NOTHING = "0"
+
+/**
+ * Codes of SystemUIActions.EDGE_ACTIONS (tap through, scroll to top/bottom,
+ * disable 5s / until touch, blackout, keep awake): they need the edge
+ * gestures' windows, so a physical key cannot run them.
+ */
+private val EDGE_ONLY_ACTIONS = setOf("25", "26", "27", "28", "29", "30", "59")
+
+/** The built-in actions as (code, label) pairs, in the list's order. */
+private fun builtInActions(context: Context, keyMode: Boolean): List<Pair<String, String>> {
+	val values = context.resources.getStringArray(R.array.edge_action_codes)
+	val labels = context.resources.getStringArray(R.array.edge_action_titles)
+	val all = values.indices.map { values[it] to labels.getOrElse(it) { values[it] } }
+	if (!keyMode) return all
+	return listOf(
+		KEY_ACTION_DEFAULT to context.getString(R.string.key_action_default),
+		KEY_ACTION_NOTHING to context.getString(R.string.key_action_nothing),
+	) + all.filter { (code, _) -> code != KEY_ACTION_DEFAULT && code !in EDGE_ONLY_ACTIONS }
+}
+
 /** Where an action's shortcut name is kept, next to the action itself. */
 fun actionLabelKey(key: String): String = key + "Label"
 
@@ -64,7 +87,7 @@ fun actionLabelKey(key: String): String = key + "Label"
  * How an action reads in a list: the built-in action's name, "Open <app>",
  * or the shortcut's own name.
  */
-fun describeAction(context: Context, value: String?, shortcutLabel: String?): String {
+fun describeAction(context: Context, value: String?, shortcutLabel: String?, keyMode: Boolean = false): String {
 	val v = value?.trim().orEmpty()
 	return when {
 		v.startsWith(ACTION_APP_PREFIX) ->
@@ -74,10 +97,8 @@ fun describeAction(context: Context, value: String?, shortcutLabel: String?): St
 			shortcutLabel ?: context.getString(R.string.action_shortcut)
 
 		else -> {
-			val values = context.resources.getStringArray(R.array.edge_action_codes)
-			val labels = context.resources.getStringArray(R.array.edge_action_titles)
-			val index = values.indexOf(v.ifEmpty { "-1" })
-			if (index >= 0) labels[index] else labels[0]
+			val actions = builtInActions(context, keyMode)
+			actions.firstOrNull { it.first == v.ifEmpty { "-1" } }?.second ?: actions[0].second
 		}
 	}
 }
@@ -101,7 +122,7 @@ internal fun ActionPrefItem(node: ActionPref, store: PrefStore) {
 	var pickShortcut by remember { mutableStateOf(false) }
 
 	val current = store.read(node) ?: node.default ?: "-1"
-	val shown = describeAction(context, current, store.getString(actionLabelKey(node.key), null))
+	val shown = describeAction(context, current, store.getString(actionLabelKey(node.key), null), node.keyMode)
 
 	val shortcutLauncher = rememberLauncherForActivityResult(
 		ActivityResultContracts.StartActivityForResult(),
@@ -134,12 +155,11 @@ internal fun ActionPrefItem(node: ActionPref, store: PrefStore) {
 	)
 
 	if (open) {
-		val labels = remember(context) { context.resources.getStringArray(R.array.edge_action_titles).toList() }
-		val values = remember(context) { context.resources.getStringArray(R.array.edge_action_codes).toList() }
+		val actions = remember(context, node.keyMode) { builtInActions(context, node.keyMode) }
 		var query by remember { mutableStateOf("") }
 		val appText = stringResource(R.string.action_pick_app)
 		val shortcutText = stringResource(R.string.action_pick_shortcut)
-		val matching = values.indices.filter { matchesQuery(labels.getOrElse(it) { values[it] }, query) }
+		val matching = actions.filter { (_, label) -> matchesQuery(label, query) }
 
 		AlertDialog(
 			onDismissRequest = { open = false },
@@ -187,9 +207,9 @@ internal fun ActionPrefItem(node: ActionPref, store: PrefStore) {
 								HorizontalDivider()
 							}
 						}
-						items(matching, key = { values[it] }) { i ->
-							ChoiceRow(text = labels.getOrElse(i) { values[i] }, selected = values[i] == current) {
-								store.write(node, values[i])
+						items(matching, key = { it.first }) { (code, label) ->
+							ChoiceRow(text = label, selected = code == current) {
+								store.write(node, code)
 								open = false
 							}
 						}

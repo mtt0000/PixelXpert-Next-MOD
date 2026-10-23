@@ -26,7 +26,6 @@ val misc_prefs: PrefScreen = PrefScreen(
 				SliderPref(key = "FastChargingWattage", title = R.string.fast_charging_threshold_title, default = "5", min = 5f, max = 50f, step = 5f, valueCount = 1),
 				SwitchPref(key = "sysui_tuner", titleText = "SystemUI Tuner", default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				NavRow(key = "remap_physical_buttons", title = R.string.remap_physical_buttons_title, route = "physical_button_remap"),
-				SwitchPref(key = "controlFlashWithVolKeys", title = R.string.control_flashlight_with_volume_keys, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				SwitchPref(key = "enable_high_brightness_flashlight", title = R.string.enable_high_brightness_flashlight_title, summary = R.string.enable_high_brightness_flashlight_summary, default = "false"),
 				SwitchPref(key = "AnimateFlashlight", title = R.string.flashlight_fade_effect, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				SwitchPref(key = "SleepOnFlatScreen", title = R.string.sleep_on_flat_screen_title, default = "false", prominent = true, summaryOn = R.string.general_on, summaryOff = R.string.general_off),

@@ -2,92 +2,156 @@ package sh.anirudhgupta109.pxn.xposed.modpacks.android
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
 import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
+import android.os.UserHandle
 import android.os.VibrationAttributes.USAGE_ACCESSIBILITY
 import android.os.VibrationEffect.EFFECT_TICK
+import android.view.InputDevice
+import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.KeyEvent.ACTION_DOWN
 import android.view.KeyEvent.ACTION_UP
-import android.view.KeyEvent.KEYCODE_CAMERA
 import android.view.KeyEvent.KEYCODE_POWER
 import android.view.KeyEvent.KEYCODE_VOLUME_DOWN
 import android.view.KeyEvent.KEYCODE_VOLUME_UP
 import android.view.ViewConfiguration
 import de.robv.android.xposed.XposedHelpers.callMethod
+import de.robv.android.xposed.XposedHelpers.getIntField
 import de.robv.android.xposed.XposedHelpers.getObjectField
 import de.robv.android.xposed.XposedHelpers.setObjectField
 import io.github.libxposed.api.XposedModuleInterface
 import org.apache.commons.lang3.SystemProperties
+import sh.anirudhgupta109.pxn.Constants
+import sh.anirudhgupta109.pxn.util.KeyRemapMigration
 import sh.anirudhgupta109.pxn.xposed.XPrefs.Xprefs
 import sh.anirudhgupta109.pxn.xposed.XposedModPack
 import sh.anirudhgupta109.pxn.xposed.annotations.FrameworkModPack
+import sh.anirudhgupta109.pxn.xposed.utils.SystemUIActions
 import sh.anirudhgupta109.pxn.xposed.utils.SystemUtils
 import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
 import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedMethod
 
 /**
- * Remaps the physical keys that matter with the screen off: the power key's
- * long press, the double-tap-power camera gesture, and the volume keys - each
- * resolved to whatever action the Settings page bound to it (torch, camera,
- * assistant, media transport, or nothing at all).
+ * Remaps the physical keys (Settings > Physical buttons): Power long and
+ * double press, Volume up / down single, double and long press, each with
+ * the screen on and off, and the two-key combinations. Every one holds a
+ * gesture action code, "-1" (Android's own behaviour) or "0" (do nothing).
  *
- * The hooks live in system server's `PhoneWindowManager` (the `PowerKeyRule`
- * long press, `startedWakingUp`, `interceptKeyBeforeQueueing`) and in
- * `GestureLauncherService`, and every hook body sits inside a `Throwable`
- * swallow so a build whose policy classes differ simply keeps its stock
- * behaviour. `startedWakingUp` only timestamps `mWakeTime`: whether the
- * screen counts as on is uptime minus that stamp, because the display state
- * lags the very power press being judged.
+ * Power: `PhoneWindowManager$PowerKeyRule.onLongPress` and
+ * `GestureLauncherService.handleCameraGesture` (the double press), as
+ * before. A single press is left alone - it is what wakes and locks the
+ * phone. `startedWakingUp` only timestamps `mWakeTime`: whether the screen
+ * counts as on is uptime minus that stamp, because the display state lags
+ * the very power press being judged.
+ *
+ * Volume: `interceptKeyBeforeQueueing` takes a press whenever that key has
+ * anything mapped for the current screen state, and decides on its own:
+ * a long press after the long-press timeout, a double press when a second
+ * press starts within the double-tap timeout (only waited for when a double
+ * press is mapped), otherwise a single press. A press that ends up with no
+ * mapping is replayed as an injected key - held, too, with key repeats - so
+ * Android does what it always does; injected keys pass straight through.
+ * During calls and ringing (audio mode not normal) the keys are left alone.
+ *
+ * Combinations are recognised by the input service before the policy sees
+ * the keys (KeyGestureController on 17, PhoneWindowManager before), which
+ * flags the keys with FLAG_KEY_GESTURE_TRIGGERED; then any pending volume
+ * press is dropped. A mapped combination replaces the rule's `execute` (and
+ * its `cancel`), and its `preCondition` is forced true, so e.g. Volume up +
+ * down works without the accessibility shortcut configured.
+ *
+ * Torch, camera, assistant and media keys run here, as before (the camera
+ * and the assistant then start from the lock screen); every other action is
+ * sent to SystemUI, which runs it with SystemUIActions (KeyActionReceiver).
+ * After a quiet action (torch, media, toggles, nothing) on a power press that
+ * woke the screen, the screen goes back off.
  *
  * With `controlFlashWithVolKeys` set and the torch already lit, the volume
  * keys instead step the torch level - one step per press, or a 100ms ramp
  * while held - so the flashlight stays reachable from the pocket.
- *
- * Kotlin has no class-level `@SuppressWarnings("RedundantThrows")`
- * equivalent, so it is absent here; `onPackageLoaded` does not declare `throws`
- * either way, because the base class already carries `@Throws`.
  */
 @FrameworkModPack
 class ScreenOffKeys(context: Context) : XposedModPack(context) {
 
 	companion object {
-		const val PHYSICAL_ACTION_NONE = -1
-
-		const val PHYSICAL_ACTION_DEFAULT = 0
-		const val PHYSICAL_ACTION_TORCH = 1
-		const val PHYSICAL_ACTION_CAMERA = 2
-		const val PHYSICAL_ACTION_ASSISTANT = 3
-		/**
-		 * @noinspection unused
-		 */
-		const val PHYSICAL_ACTION_DND = 4
-		const val PHYSICAL_ACTION_PLAY_PAUSE = 5
-		const val PHYSICAL_ACTION_MEDIA_NEXT = 6
-		const val PHYSICAL_ACTION_MEDIA_PREV = 7
+		const val KEY_DEFAULT = "-1"
+		const val KEY_NOTHING = "0"
 
 		const val WAKE_REASON_POWER_BUTTON = 1
 		const val CAMERA_LAUNCH_SOURCE_POWER_DOUBLE_TAP = 1
 		private const val INVOCATION_TYPE_POWER_BUTTON_LONG_PRESS = 6
 		const val ACTION_COMPLETE = 1 // SingleKeyGestureEvent
 
-		private var longPressPowerButtonScreenOff = 0
-		private var longPressPowerButtonScreenOn = 0
-		private var doublePressPowerButtonScreenOff = 0
-		private var doublePressPowerButtonScreenOn = 0
-		private var longPressVolumeUpButtonScreenOff = 0
-		private var longPressVolumeDownButtonScreenOff = 0
-		private var AnimateFlashlight = false
+		/** WindowManagerPolicyConstants.FLAG_INJECTED */
+		private const val POLICY_FLAG_INJECTED = 0x01000000
+		private const val KEY_REPEAT_INTERVAL = 50L
 
+		private val POWER_KEYS = listOf("KeyPowerLongOn", "KeyPowerDoubleOn", "KeyPowerLongOff", "KeyPowerDoubleOff")
+		private val VOLUME_KEYS = listOf("KeyVolUp", "KeyVolDown").flatMap { key ->
+			listOf("Single", "Double", "Long").flatMap { press -> listOf("$key${press}On", "$key${press}Off") }
+		}
+		private const val COMBO_POWER_VOL_DOWN = "KeyComboPowerVolDown"
+		private const val COMBO_POWER_VOL_UP = "KeyComboPowerVolUp"
+		private const val COMBO_VOL_UP_DOWN = "KeyComboVolUpDown"
+		private val ALL_KEYS = POWER_KEYS + VOLUME_KEYS + listOf(COMBO_POWER_VOL_DOWN, COMBO_POWER_VOL_UP, COMBO_VOL_UP_DOWN)
+
+		/** New key to the pre-gesture-actions key it replaces, until the app migrates it. */
+		private val OLD_KEYS = KeyRemapMigration.KEYS.entries.associate { (old, new) -> new to old }
+
+		/** Actions that need no screen: after one, a power press that woke the screen turns it off again. */
+		private val QUIET_ACTIONS = setOf(
+			0,
+			SystemUIActions.ACTION_TORCH,
+			SystemUIActions.ACTION_PLAY_PAUSE,
+			SystemUIActions.ACTION_MEDIA_NEXT,
+			SystemUIActions.ACTION_MEDIA_PREVIOUS,
+			SystemUIActions.ACTION_VOLUME_UP,
+			SystemUIActions.ACTION_VOLUME_DOWN,
+			SystemUIActions.ACTION_TOGGLE_MUTE,
+			SystemUIActions.ACTION_TOGGLE_WIFI,
+			SystemUIActions.ACTION_TOGGLE_BLUETOOTH,
+			SystemUIActions.ACTION_TOGGLE_MOBILE_DATA,
+			SystemUIActions.ACTION_TOGGLE_AIRPLANE,
+			SystemUIActions.ACTION_TOGGLE_DND,
+			SystemUIActions.ACTION_TOGGLE_NFC,
+			SystemUIActions.ACTION_TOGGLE_LOCATION,
+			SystemUIActions.ACTION_TOGGLE_DARK_MODE,
+			SystemUIActions.ACTION_TOGGLE_AUTO_BRIGHTNESS,
+			SystemUIActions.ACTION_RINGER_MODE,
+			SystemUIActions.ACTION_AUTO_ROTATE,
+		)
+
+		private var AnimateFlashlight = false
 		private var controlFlashWithVolKeys = false
 	}
+
+	private val keyActions = HashMap<String, String>()
 
 	private var launchAssistActionMethod: ReflectedMethod? = null
 	private var windowMan: Any? = null
 	private var mWakeTime = 0L
+	private var policyHandler: Handler? = null
+	private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 
-	private var mVolumeLongPress = VolumeLongPressRunnable(PHYSICAL_ACTION_DEFAULT)
+	/** WindowManagerPolicyConstants.FLAG_KEY_GESTURE_TRIGGERED, read at runtime; 0 where it does not exist. */
+	private var keyGestureTriggeredFlag = 0
+
+	/** Set while our own camera launch calls handleCameraGesture, so its hook stays out. */
+	@Volatile
+	private var launchingCamera = false
+
+	private val lock = Any()
+	private val volumeUp = VolumeKey(KEYCODE_VOLUME_UP, "KeyVolUp")
+	private val volumeDown = VolumeKey(KEYCODE_VOLUME_DOWN, "KeyVolDown")
+	private var powerDown = false
+
+	/** The combination rule whose execute was replaced, so its cancel is skipped too. */
+	private var overriddenRule: Any? = null
+
 	private var mFlashAdjustRunnable = FlashAdjustLongRunnable(KEYCODE_VOLUME_DOWN)
 	private val mLock = Any()
 	private var mKeyIsDown = false
@@ -96,14 +160,7 @@ class ScreenOffKeys(context: Context) : XposedModPack(context) {
 	@SuppressLint("CheckResult")
 	override fun onPreferenceUpdated(vararg key: String?) {
 		try {
-			longPressPowerButtonScreenOff = Integer.parseInt(Xprefs.getString("longPressPowerButtonScreenOff", "0"))
-			longPressPowerButtonScreenOn = Integer.parseInt(Xprefs.getString("longPressPowerButtonScreenOn", "0"))
-
-			doublePressPowerButtonScreenOff = Integer.parseInt(Xprefs.getString("doublePressPowerButtonScreenOff", "0"))
-			doublePressPowerButtonScreenOn = Integer.parseInt(Xprefs.getString("doublePressPowerButtonScreenOn", "0"))
-
-			longPressVolumeUpButtonScreenOff = Integer.parseInt(Xprefs.getString("longPressVolumeUpButtonScreenOff", "0"))
-			longPressVolumeDownButtonScreenOff = Integer.parseInt(Xprefs.getString("longPressVolumeDownButtonScreenOff", "0"))
+			for (name in ALL_KEYS) keyActions[name] = readKeyAction(name)
 
 			controlFlashWithVolKeys = Xprefs.getBoolean("controlFlashWithVolKeys", false)
 
@@ -114,7 +171,31 @@ class ScreenOffKeys(context: Context) : XposedModPack(context) {
 		}
 	}
 
+	/** The new key, else the old one it replaces, converted, while the app has not migrated it. */
+	private fun readKeyAction(name: String): String {
+		val value = try {
+			Xprefs.getString(name, null)
+		} catch (ignored: Throwable) {
+			null
+		}
+		if (!value.isNullOrBlank()) return value.trim()
+		val old = OLD_KEYS[name] ?: return KEY_DEFAULT
+		return try {
+			KeyRemapMigration.convert(Xprefs.getString(old, null))
+		} catch (ignored: Throwable) {
+			null
+		} ?: KEY_DEFAULT
+	}
+
+	private fun action(name: String): String = keyActions[name] ?: KEY_DEFAULT
+
 	override fun onPackageLoaded(PRParam: XposedModuleInterface.PackageReadyParam) {
+		keyGestureTriggeredFlag = try {
+			Class.forName("android.view.WindowManagerPolicyConstants").getField("FLAG_KEY_GESTURE_TRIGGERED").getInt(null)
+		} catch (ignored: Throwable) {
+			0
+		}
+
 		try {
 			val PhoneWindowManagerClass = ReflectedClass.of("com.android.server.policy.PhoneWindowManager")
 			val PowerKeyRuleClass = ReflectedClass.of("com.android.server.policy.PhoneWindowManager\$PowerKeyRule")
@@ -125,15 +206,11 @@ class ScreenOffKeys(context: Context) : XposedModPack(context) {
 			GestureLauncherServiceClass
 				.before("handleCameraGesture")
 				.run { param ->
+					if (launchingCamera) return@run
 					val screenIsOn = screenIsOn()
-
-					val handled = launchAction(
-						resolveAction(KEYCODE_CAMERA, screenIsOn),
-						screenIsOn,
-						true,
-					)
-
-					if (handled) {
+					val action = powerAction("Double", screenIsOn)
+					if (action != KEY_DEFAULT) {
+						runAction(action, screenIsOn, sleepAfter = true, delaySleep = true)
 						param.setResult(true)
 					}
 				}
@@ -142,6 +219,7 @@ class ScreenOffKeys(context: Context) : XposedModPack(context) {
 				.after("enableScreen")
 				.run { param ->
 					windowMan = param.thisObject
+					policyHandler = runCatching { getObjectField(param.thisObject, "mHandler") as Handler }.getOrNull()
 
 					setObjectField(
 						getObjectField(param.thisObject, "mGestureLauncherService"),
@@ -163,14 +241,14 @@ class ScreenOffKeys(context: Context) : XposedModPack(context) {
 					}
 
 					val screenIsOn = screenIsOn()
-					val customAction = resolveAction(KEYCODE_POWER, screenIsOn)
+					val customAction = powerAction("Long", screenIsOn)
 
-					if (customAction != PHYSICAL_ACTION_DEFAULT) {
+					if (customAction != KEY_DEFAULT) {
 						// Suppress OS handling of this long press (both ACTION_START and ACTION_COMPLETE)
 						param.setResult(null)
 
-						if (actionType == ACTION_COMPLETE && customAction != PHYSICAL_ACTION_NONE) {
-							launchAction(customAction, screenIsOn, false)
+						if (actionType == ACTION_COMPLETE) {
+							runAction(customAction, screenIsOn, sleepAfter = true, delaySleep = false)
 						}
 					}
 				}
@@ -191,60 +269,394 @@ class ScreenOffKeys(context: Context) : XposedModPack(context) {
 				.run { param ->
 					try {
 						val event = param.args[0] as KeyEvent
-						val keyCode = event.keyCode
-
-						if ((keyCode == KEYCODE_VOLUME_UP || keyCode == KEYCODE_VOLUME_DOWN) &&
-							controlFlashWithVolKeys &&
-							SystemUtils.isFlashOn()
-						) {
-							val handler = getObjectField(param.thisObject, "mHandler") as Handler
-							handleFlashKeys(event, handler)
-							param.setResult(0)
-							return@run
+						val policyFlags = param.args.getOrNull(1) as? Int ?: 0
+						if (policyHandler == null) {
+							policyHandler = runCatching { getObjectField(param.thisObject, "mHandler") as Handler }.getOrNull()
 						}
-
-						if (!deviceIsInteractive() &&
-							((keyCode == KEYCODE_VOLUME_UP && longPressVolumeUpButtonScreenOff != PHYSICAL_ACTION_DEFAULT) ||
-								(keyCode == KEYCODE_VOLUME_DOWN && longPressVolumeDownButtonScreenOff != PHYSICAL_ACTION_DEFAULT))
-						) {
-							val handler = getObjectField(param.thisObject, "mHandler") as Handler
-
-							when (event.action) {
-								KeyEvent.ACTION_UP -> {
-									if (handler.hasCallbacks(mVolumeLongPress)) {
-										SystemUtils.AudioManager()!!.adjustStreamVolume(
-											AudioManager.STREAM_MUSIC,
-											if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) AudioManager.ADJUST_LOWER else AudioManager.ADJUST_RAISE,
-											0,
-										)
-										handler.removeCallbacks(mVolumeLongPress)
-										param.setResult(0)
-									}
-									return@run
-								}
-								KeyEvent.ACTION_DOWN -> {
-									val action = resolveAction(keyCode, false)
-
-									mVolumeLongPress = VolumeLongPressRunnable(action)
-									if (isActionLaunchable(action)) {
-										handler.postDelayed(mVolumeLongPress, ViewConfiguration.getLongPressTimeout().toLong())
-										param.setResult(0)
-									}
-								}
-							}
-						}
+						if (interceptKey(event, policyFlags)) param.setResult(0)
 					} catch (ignored: Throwable) {
 					}
 				}
 		} catch (ignored: Throwable) {
 		}
+
+		hookCombinationRules()
 	}
 
-	private fun handleFlashKeys(event: KeyEvent, handler: Handler) {
-		val action = event.action
+	// ------------------------------------------------------------ keys
 
-		when (action) {
+	/** True when the key is consumed. */
+	private fun interceptKey(event: KeyEvent, policyFlags: Int): Boolean {
+		val keyCode = event.keyCode
+		if (keyCode != KEYCODE_POWER && keyCode != KEYCODE_VOLUME_UP && keyCode != KEYCODE_VOLUME_DOWN) return false
+		// Our own replays, and keys other apps inject.
+		if (policyFlags and POLICY_FLAG_INJECTED != 0) return false
+
+		if (keyCode != KEYCODE_POWER &&
+			controlFlashWithVolKeys &&
+			SystemUtils.isFlashOn()
+		) {
+			handleFlashKeys(event)
+			return true
+		}
+
+		synchronized(lock) {
+			if (keyCode == KEYCODE_POWER) {
+				powerDown = event.action == ACTION_DOWN
+			}
+
+			// A combination took these keys: drop whatever volume press was pending.
+			if (keyGestureTriggeredFlag != 0 && policyFlags and keyGestureTriggeredFlag != 0) {
+				volumeUp.cancel()
+				volumeDown.cancel()
+				return false
+			}
+			if (keyCode == KEYCODE_POWER) return false
+
+			val key = if (keyCode == KEYCODE_VOLUME_UP) volumeUp else volumeDown
+			val other = if (keyCode == KEYCODE_VOLUME_UP) volumeDown else volumeUp
+
+			// With Power or the other volume key down this is (probably) a combination.
+			if (event.action == ACTION_DOWN && event.repeatCount == 0 && (powerDown || other.isDown)) {
+				other.cancel()
+				key.passThrough()
+				return false
+			}
+			return key.onEvent(event)
+		}
+	}
+
+	/** Volume up or down: one press at a time, see the class docs. */
+	private inner class VolumeKey(val keyCode: Int, val prefix: String) {
+		/** The current press is ours. */
+		private var handling = false
+		/** The first press ended; a second one would make a double press. */
+		private var waitingSecond = false
+		private var secondPress = false
+		private var longFired = false
+		/** A long press with nothing mapped, replayed as a held key. */
+		private var holding = false
+		private var repeatCount = 0
+		/** Taken by a combination: the rest of the press does nothing. */
+		private var cancelled = false
+		/** Not ours, until the key goes up. */
+		private var ignoring = false
+		private var interactive = true
+		private var downTime = 0L
+
+		var isDown = false
+			private set
+
+		private val longRunnable = Runnable { synchronized(lock) { onLong() } }
+		private val singleRunnable = Runnable { synchronized(lock) { onSingleTimeout() } }
+		private val repeatRunnable = Runnable { synchronized(lock) { onRepeat() } }
+
+		private fun mapped(press: String): String = action("$prefix$press${if (interactive) "On" else "Off"}")
+
+		fun onEvent(event: KeyEvent): Boolean {
+			when (event.action) {
+				ACTION_DOWN -> {
+					isDown = true
+					if (event.repeatCount > 0) return handling || holding
+					if (waitingSecond) {
+						policyHandler?.removeCallbacks(singleRunnable)
+						waitingSecond = false
+						secondPress = true
+						handling = true
+						return true
+					}
+					reset()
+					interactive = deviceIsInteractive()
+					val handler = policyHandler ?: return false
+					if (SystemUtils.AudioManager()?.mode != AudioManager.MODE_NORMAL) return false
+					if (mapped("Single") == KEY_DEFAULT && mapped("Double") == KEY_DEFAULT && mapped("Long") == KEY_DEFAULT) {
+						return false
+					}
+					handling = true
+					downTime = event.downTime
+					handler.postDelayed(longRunnable, ViewConfiguration.getLongPressTimeout().toLong())
+					return true
+				}
+
+				ACTION_UP -> {
+					isDown = false
+					if (ignoring) {
+						ignoring = false
+						return false
+					}
+					if (!handling) return false
+					handling = false
+					policyHandler?.removeCallbacks(longRunnable)
+					when {
+						cancelled -> cancelled = false
+						holding -> {
+							policyHandler?.removeCallbacks(repeatRunnable)
+							holding = false
+							inject(ACTION_UP, 0)
+						}
+						longFired -> longFired = false
+						secondPress -> {
+							secondPress = false
+							run(mapped("Double"))
+						}
+						mapped("Double") != KEY_DEFAULT -> {
+							waitingSecond = true
+							policyHandler?.postDelayed(singleRunnable, ViewConfiguration.getDoubleTapTimeout().toLong())
+						}
+						else -> single()
+					}
+					return true
+				}
+			}
+			return false
+		}
+
+		private fun onLong() {
+			if (!handling || cancelled || secondPress) return
+			val long = mapped("Long")
+			if (long != KEY_DEFAULT) {
+				longFired = true
+				run(long)
+			} else {
+				// Nothing mapped: hand Android the key as if it had been held all along.
+				holding = true
+				repeatCount = 0
+				inject(ACTION_DOWN, 0)
+				policyHandler?.postDelayed(repeatRunnable, KEY_REPEAT_INTERVAL)
+			}
+		}
+
+		private fun onRepeat() {
+			if (!holding) return
+			inject(ACTION_DOWN, ++repeatCount)
+			policyHandler?.postDelayed(repeatRunnable, KEY_REPEAT_INTERVAL)
+		}
+
+		private fun onSingleTimeout() {
+			if (!waitingSecond) return
+			waitingSecond = false
+			single()
+		}
+
+		private fun single() {
+			val single = mapped("Single")
+			if (single != KEY_DEFAULT) {
+				run(single)
+			} else {
+				inject(ACTION_DOWN, 0)
+				inject(ACTION_UP, 0)
+			}
+		}
+
+		private fun run(value: String) {
+			val screenIsOn = interactive
+			mainHandler.post { runAction(value, screenIsOn, sleepAfter = false, delaySleep = false) }
+		}
+
+		/** A replay of this key, which the hook lets through (it is injected). */
+		private fun inject(action: Int, repeat: Int) {
+			val now = SystemClock.uptimeMillis()
+			SystemUIActions.inject(
+				mContext,
+				KeyEvent(
+					if (downTime > 0) downTime else now,
+					now,
+					action,
+					keyCode,
+					repeat,
+					0,
+					KeyCharacterMap.VIRTUAL_KEYBOARD,
+					0,
+					KeyEvent.FLAG_FROM_SYSTEM,
+					InputDevice.SOURCE_KEYBOARD,
+				),
+			)
+		}
+
+		/** A combination took the key: whatever was pending is dropped. */
+		fun cancel() {
+			policyHandler?.removeCallbacks(longRunnable)
+			policyHandler?.removeCallbacks(singleRunnable)
+			policyHandler?.removeCallbacks(repeatRunnable)
+			if (holding) {
+				holding = false
+				inject(ACTION_UP, 0)
+			}
+			waitingSecond = false
+			secondPress = false
+			longFired = false
+			if (handling) cancelled = true
+		}
+
+		/** This press is part of a combination: Android gets it untouched. */
+		fun passThrough() {
+			cancel()
+			handling = false
+			cancelled = false
+			ignoring = true
+			isDown = true
+		}
+
+		private fun reset() {
+			cancelled = false
+			ignoring = false
+			longFired = false
+			secondPress = false
+			holding = false
+			repeatCount = 0
+		}
+	}
+
+	// ------------------------------------------------------------ combinations
+
+	/**
+	 * The two-key rules are anonymous subclasses of
+	 * KeyCombinationManager.TwoKeysCombinationRule, in KeyGestureController
+	 * (input service, 17) or PhoneWindowManager (before).
+	 */
+	private fun hookCombinationRules() {
+		for (owner in arrayOf("com.android.server.input.KeyGestureController", "com.android.server.policy.PhoneWindowManager")) {
+			for (i in 1..120) {
+				val ruleClass = ReflectedClass.ofIfPossible("$owner\$$i")
+				val clazz = ruleClass.clazz ?: continue
+				if (clazz.superclass?.name?.endsWith("KeyCombinationManager\$TwoKeysCombinationRule") != true) continue
+				try {
+					ruleClass
+						.before("execute")
+						.run { param ->
+							val value = comboAction(param.thisObject)
+							if (value == KEY_DEFAULT) {
+								overriddenRule = null
+								return@run
+							}
+							param.setResult(null)
+							overriddenRule = param.thisObject
+							val screenIsOn = deviceIsInteractive()
+							mainHandler.post { runAction(value, screenIsOn, sleepAfter = false, delaySleep = false) }
+						}
+					ruleClass
+						.before("cancel")
+						.run { param ->
+							if (param.thisObject === overriddenRule) param.setResult(null)
+						}
+					ruleClass
+						.after("preCondition")
+						.run { param ->
+							if (comboAction(param.thisObject) != KEY_DEFAULT) param.setResult(true)
+						}
+				} catch (ignored: Throwable) {
+				}
+			}
+		}
+	}
+
+	private fun comboAction(rule: Any?): String {
+		val codes = try {
+			setOf(getIntField(rule, "mKeyCode1"), getIntField(rule, "mKeyCode2"))
+		} catch (ignored: Throwable) {
+			return KEY_DEFAULT
+		}
+		return when (codes) {
+			setOf(KEYCODE_POWER, KEYCODE_VOLUME_DOWN) -> action(COMBO_POWER_VOL_DOWN)
+			setOf(KEYCODE_POWER, KEYCODE_VOLUME_UP) -> action(COMBO_POWER_VOL_UP)
+			setOf(KEYCODE_VOLUME_UP, KEYCODE_VOLUME_DOWN) -> action(COMBO_VOL_UP_DOWN)
+			else -> KEY_DEFAULT
+		}
+	}
+
+	// ------------------------------------------------------------ actions
+
+	/** Power [press] for the screen state; a lit torch keeps the screen-off torch mapping, to turn it off. */
+	private fun powerAction(press: String, screenIsOn: Boolean): String {
+		val off = action("KeyPower${press}Off")
+		if (off.toIntOrNull() == SystemUIActions.ACTION_TORCH && SystemUtils.isFlashOn()) return off
+		return action("KeyPower$press${if (screenIsOn) "On" else "Off"}")
+	}
+
+	/**
+	 * Runs a mapped action. [sleepAfter]: a power press, which woke the
+	 * screen; after a quiet action it goes back off (after a moment for a
+	 * double press, whose second press woke it).
+	 */
+	private fun runAction(value: String, screenIsOn: Boolean, sleepAfter: Boolean, delaySleep: Boolean) {
+		try {
+			val code = value.trim().toIntOrNull()
+			when (code) {
+				0 -> {}
+				SystemUIActions.ACTION_TORCH -> SystemUtils.toggleFlash(AnimateFlashlight)
+				SystemUIActions.ACTION_CAMERA -> if (!launchCamera()) sendToSystemUI(value)
+				SystemUIActions.ACTION_ASSISTANT -> if (!launchAssistant()) sendToSystemUI(value)
+				SystemUIActions.ACTION_PLAY_PAUSE -> dispatchAudioKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+				SystemUIActions.ACTION_MEDIA_NEXT -> if (musicActive()) dispatchAudioKey(KeyEvent.KEYCODE_MEDIA_NEXT)
+				SystemUIActions.ACTION_MEDIA_PREVIOUS -> if (musicActive()) dispatchAudioKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+				else -> sendToSystemUI(value)
+			}
+
+			if (code != 0) SystemUtils.vibrate(EFFECT_TICK, USAGE_ACCESSIBILITY)
+
+			if (sleepAfter && !screenIsOn && code != null && code in QUIET_ACTIONS) {
+				Thread {
+					if (delaySleep) SystemUtils.threadSleep(500)
+					SystemUtils.sleep()
+				}.start()
+			}
+		} catch (ignored: Throwable) {
+		}
+	}
+
+	/** Through GestureLauncherService, which can start the secure camera on the lock screen. */
+	private fun launchCamera(): Boolean = try {
+		launchingCamera = true
+		callMethod(getObjectField(windowMan, "mGestureLauncherService"), "handleCameraGesture", false, CAMERA_LAUNCH_SOURCE_POWER_DOUBLE_TAP) as Boolean
+	} catch (ignored: Throwable) {
+		false
+	} finally {
+		launchingCamera = false
+	}
+
+	private fun launchAssistant(): Boolean = try {
+		launchAssistActionMethod!!.invoke(windowMan, null, -2, SystemClock.uptimeMillis(), INVOCATION_TYPE_POWER_BUTTON_LONG_PRESS)
+		true
+	} catch (ignored: Throwable) {
+		false
+	}
+
+	/** Everything else runs in SystemUI, see KeyActionReceiver. */
+	@SuppressLint("MissingPermission")
+	private fun sendToSystemUI(value: String) {
+		val intent = Intent(SystemUIActions.ACTION_RUN_KEY_ACTION)
+			.setPackage(Constants.SYSTEM_UI_PACKAGE)
+			.putExtra(SystemUIActions.EXTRA_KEY_ACTION, value)
+			.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+		mContext.sendBroadcastAsUser(intent, UserHandle.SYSTEM)
+	}
+
+	@Suppress("DEPRECATION")
+	private fun musicActive(): Boolean = SystemUtils.AudioManager()?.isMusicActive == true
+
+	private fun screenIsOn(): Boolean { //for power button, display state isn't reliable enough because pressing power will trigger it
+		return SystemClock.uptimeMillis() - mWakeTime > 1000
+	}
+
+	private fun deviceIsInteractive(): Boolean {
+		//noinspection DataFlowIssue
+		return SystemUtils.PowerManager()!!.isInteractive()
+	}
+
+	private fun dispatchAudioKey(keyCode: Int) {
+		//noinspection DataFlowIssue
+		SystemUtils.AudioManager()!!.dispatchMediaKeyEvent(KeyEvent(ACTION_DOWN, keyCode))
+
+		SystemUtils.AudioManager()!!.dispatchMediaKeyEvent(KeyEvent(ACTION_UP, keyCode))
+	}
+
+	// ------------------------------------------------------------ torch
+
+	private fun handleFlashKeys(event: KeyEvent) {
+		val handler = policyHandler ?: return
+		when (event.action) {
 			ACTION_DOWN -> {
+				if (event.repeatCount > 0) return
 				mFlashAdjustRunnable = FlashAdjustLongRunnable(event.keyCode)
 				synchronized(mLock) {
 					mKeyIsDown = true
@@ -274,132 +686,6 @@ class ScreenOffKeys(context: Context) : XposedModPack(context) {
 
 		val newLevel = SystemUtils.getFlashlightLevel(SystemUtils.getFlashStrengthPCT() + step)
 		SystemUtils.setFlash(true, newLevel, false)
-	}
-
-	private fun resolveAction(keyCode: Int, screenIsOn: Boolean): Int {
-		val flashIsOn = SystemUtils.isFlashOn()
-
-		val action = when (keyCode) {
-			KEYCODE_CAMERA -> {
-				if (doublePressPowerButtonScreenOff == PHYSICAL_ACTION_TORCH && flashIsOn) {
-					PHYSICAL_ACTION_TORCH
-				} else if (screenIsOn) {
-					doublePressPowerButtonScreenOn
-				} else {
-					doublePressPowerButtonScreenOff
-				}
-			}
-			KEYCODE_VOLUME_DOWN -> longPressVolumeDownButtonScreenOff
-			KEYCODE_VOLUME_UP -> longPressVolumeUpButtonScreenOff
-			KEYCODE_POWER -> {
-				if (longPressPowerButtonScreenOff == PHYSICAL_ACTION_TORCH && flashIsOn) {
-					PHYSICAL_ACTION_TORCH
-				} else if (screenIsOn) {
-					longPressPowerButtonScreenOn
-				} else {
-					longPressPowerButtonScreenOff
-				}
-			}
-			else -> PHYSICAL_ACTION_DEFAULT
-		}
-		return action
-	}
-
-	private fun isActionLaunchable(action: Int): Boolean = when (action) {
-		PHYSICAL_ACTION_MEDIA_NEXT, PHYSICAL_ACTION_MEDIA_PREV ->
-			//noinspection DataFlowIssue
-			SystemUtils.AudioManager()!!.isMusicActive()
-		else -> true
-	}
-
-	private fun screenIsOn(): Boolean { //for power button, display state isn't reliable enough because pressing power will trigger it
-		return SystemClock.uptimeMillis() - mWakeTime > 1000
-	}
-
-	private fun deviceIsInteractive(): Boolean {
-		//noinspection DataFlowIssue
-		return SystemUtils.PowerManager()!!.isInteractive()
-	}
-
-	/**
-	 * @noinspection DataFlowIssue
-	 */
-	private fun launchAction(action: Int, screenIsOn: Boolean, delaySleep: Boolean): Boolean {
-		try {
-			var handled = false
-			var shouldSleep = true
-
-			when (action) {
-				PHYSICAL_ACTION_NONE -> handled = true
-				PHYSICAL_ACTION_TORCH -> {
-					SystemUtils.toggleFlash(AnimateFlashlight)
-					handled = true
-				}
-				PHYSICAL_ACTION_CAMERA -> {
-					try {
-						val gestureLauncherService = getObjectField(windowMan, "mGestureLauncherService")
-						handled = callMethod(gestureLauncherService, "handleCameraGesture", false, CAMERA_LAUNCH_SOURCE_POWER_DOUBLE_TAP) as Boolean
-						shouldSleep = false
-					} catch (ignored: Throwable) {
-					}
-				}
-				PHYSICAL_ACTION_ASSISTANT -> {
-					try {
-						launchAssistActionMethod!!.invoke(windowMan, null, -2, SystemClock.uptimeMillis(), INVOCATION_TYPE_POWER_BUTTON_LONG_PRESS)
-						handled = true
-						shouldSleep = false
-					} catch (ignored: Throwable) {
-					}
-				}
-				PHYSICAL_ACTION_PLAY_PAUSE -> {
-					dispatchAudioKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-					handled = true
-				}
-				PHYSICAL_ACTION_MEDIA_NEXT -> {
-					if (SystemUtils.AudioManager()!!.isMusicActive()) {
-						dispatchAudioKey(KeyEvent.KEYCODE_MEDIA_NEXT)
-					}
-					handled = true
-				}
-				PHYSICAL_ACTION_MEDIA_PREV -> {
-					if (SystemUtils.AudioManager()!!.isMusicActive()) {
-						dispatchAudioKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
-					}
-					handled = true
-				}
-			}
-
-			if (handled) {
-				if (action != PHYSICAL_ACTION_NONE) {
-					SystemUtils.vibrate(EFFECT_TICK, USAGE_ACCESSIBILITY)
-				}
-				if (!screenIsOn && shouldSleep) {
-					Thread {
-						if (delaySleep) {
-							SystemUtils.threadSleep(500)
-						}
-						SystemUtils.sleep()
-					}.start()
-				}
-			}
-
-			return handled
-		} catch (ignored: Throwable) {
-		}
-		return false
-	}
-
-	private fun dispatchAudioKey(keyCode: Int) {
-		//noinspection DataFlowIssue
-		SystemUtils.AudioManager()!!.dispatchMediaKeyEvent(KeyEvent(ACTION_DOWN, keyCode))
-
-		SystemUtils.AudioManager()!!.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
-	}
-
-	private inner class VolumeLongPressRunnable(val mAction: Int) : Runnable {
-		override fun run() {
-			launchAction(mAction, false, false)
-		}
 	}
 
 	private inner class FlashAdjustLongRunnable(val mKeyCode: Int) : Runnable {

@@ -282,7 +282,26 @@
     <string name="taskbar_force_disable_title">Forza disabilitata</string>
     <string name="taskbar_transient_title">Nascondi automaticamente</string>
     <string name="taskbar_on_launcher_title">Mostra nella home</string>
-    <string name="remap_physical_buttons_title">Rimappa pulsanti fisici</string>
+    <string name="remap_physical_buttons_title">Tasti fisici</string>
+    <string name="key_category_power">Tasto di accensione</string>
+    <string name="key_category_vol_up">Volume su</string>
+    <string name="key_category_vol_down">Volume giù</string>
+    <string name="key_category_combos">Combinazioni di tasti</string>
+    <string name="key_category_flashlight">Torcia</string>
+    <string name="key_single_on">Pressione singola - schermo acceso</string>
+    <string name="key_double_on">Doppia pressione - schermo acceso</string>
+    <string name="key_long_on">Pressione lunga - schermo acceso</string>
+    <string name="key_single_off">Pressione singola - schermo spento</string>
+    <string name="key_double_off">Doppia pressione - schermo spento</string>
+    <string name="key_long_off">Pressione lunga - schermo spento</string>
+    <string name="key_double_summary">Se assegnata, la pressione singola attende un attimo un\'eventuale seconda pressione</string>
+    <string name="key_combo_power_vol_down">Accensione + Volume giù</string>
+    <string name="key_combo_power_vol_up">Accensione + Volume su</string>
+    <string name="key_combo_vol_up_down">Volume su + Volume giù</string>
+    <string name="key_combo_summary">Premi i due tasti insieme. Predefinita mantiene il comportamento di Android (screenshot, silenzioso, scorciatoia accessibilità)</string>
+    <string name="key_action_default">Predefinita (Android)</string>
+    <string name="key_action_nothing">Non fare nulla</string>
+    <string name="control_flashlight_with_volume_keys_summary">Con la torcia accesa, i tasti volume ne regolano la luminosità</string>
     <string name="taskbar_on_ime_title">Mostra con la tastiera aperta</string>
     <!-- Package manager -->
     <string name="pm_bypass_signature_title">Ignora controllo firma pacchetto</string>

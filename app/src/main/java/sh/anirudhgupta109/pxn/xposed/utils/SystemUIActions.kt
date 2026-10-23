@@ -40,6 +40,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import sh.anirudhgupta109.pxn.BuildConfig
 import sh.anirudhgupta109.pxn.Constants
 import sh.anirudhgupta109.pxn.R
 import sh.anirudhgupta109.pxn.xposed.XPLauncher
@@ -137,6 +138,14 @@ object SystemUIActions {
 
 	const val APP_PREFIX = "app:"
 	const val INTENT_PREFIX = "intent:"
+
+	/**
+	 * System server (ScreenOffKeys) to SystemUI (KeyActionReceiver): run the
+	 * action in [EXTRA_KEY_ACTION]. The ".ACTION" prefix keeps it past
+	 * ActivityManagerService.checkBroadcastFromSystem (see PackageManager).
+	 */
+	const val ACTION_RUN_KEY_ACTION = BuildConfig.APPLICATION_ID + ".ACTION_RUN_KEY_ACTION"
+	const val EXTRA_KEY_ACTION = "value"
 
 	/** `InputManager.INJECT_INPUT_EVENT_MODE_ASYNC` */
 	private const val INJECT_MODE_ASYNC = 0

@@ -206,6 +206,11 @@ data class ColorPref(
  * `app:<package>` to open an app, or `intent:<uri>` for a shortcut, whose
  * name is kept next to it under `<key>Label`.
  */
+/**
+ * @property keyMode a physical key or key combination: "-1" reads "Default"
+ *   (Android's own behaviour) instead of "None", "0" is "Do nothing", and the
+ *   actions that need the edge gestures' windows are left out.
+ */
 data class ActionPref(
 	override val key: String,
 	override val title: Int = 0,
@@ -215,6 +220,7 @@ data class ActionPref(
 	override val dependency: String? = null,
 	override val icon: Int = 0,
 	override val ignore: Boolean = false,
+	val keyMode: Boolean = false,
 ) : ValuePref
 
 /** Value is minutes-since-midnight. */
