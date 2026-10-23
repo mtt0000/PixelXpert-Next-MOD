@@ -54,7 +54,7 @@
     <string name="lockscreen_header_summary">Change your keyguard to match your taste</string>
     <string name="statusbar_header">Status bar</string>
     <string name="statusbar_header_summary">That thin bar that shows useful data</string>
-    <string name="nav_header">Navigation bar</string>
+    <string name="nav_header">Navigation</string>
     <string name="nav_header_summary">Change the way you navigate through apps</string>
     <string name="dialer_header">Phone &amp; dialer</string>
     <string name="dialer_header_summary">A bit of aid for your phone calls</string>

@@ -9,6 +9,13 @@ val gesture_nav_prefs: PrefScreen = PrefScreen(
 	nodes = listOf(
 			Illustration(key = "system_nav_fully_gestural_illustration", lottieRawRes = R.raw.lottie_system_nav_fully_gestural, ignore = true),
 			Category(
+	title = R.string.remap_physical_buttons_title,
+	ignore = true,
+	children = listOf(
+				NavRow(key = "remap_physical_buttons", title = R.string.remap_physical_buttons_title, summary = R.string.physical_buttons_summary, route = "physical_button_remap", icon = R.drawable.ic_physical_buttons),
+	),
+			),
+			Category(
 	title = R.string.edge_gestures_title,
 	ignore = true,
 	children = listOf(
@@ -26,7 +33,6 @@ val gesture_nav_prefs: PrefScreen = PrefScreen(
 	children = listOf(
 				NavRow(key = "gesture_statusbar", title = R.string.gesture_statusbar_title, summary = R.string.gesture_statusbar_summary, route = "gesture_statusbar", icon = R.drawable.ic_gesture_top_in),
 				NavRow(key = "gesture_screen", title = R.string.gesture_screen_title, summary = R.string.gesture_screen_summary, route = "gesture_screen", icon = R.drawable.ic_gesture_screen_double_tap),
-				NavRow(key = "remap_physical_buttons", title = R.string.remap_physical_buttons_title, summary = R.string.physical_buttons_summary, route = "physical_button_remap"),
 	),
 			),
 			Category(

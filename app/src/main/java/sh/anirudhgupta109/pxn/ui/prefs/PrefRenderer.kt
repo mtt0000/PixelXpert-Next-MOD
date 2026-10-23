@@ -539,14 +539,16 @@ private fun CategoryHeader(node: Category) {
 		Box(modifier = Modifier.height(8.dp))
 		return
 	}
+	// A step larger and bolder than the rows, in the full primary colour, so
+	// the sections stand out.
 	Text(
 		text = titleText(node),
-		style = MaterialTheme.typography.titleSmall,
+		style = MaterialTheme.typography.titleMedium,
 		color = MaterialTheme.colorScheme.primary,
-		fontWeight = FontWeight.Medium,
+		fontWeight = FontWeight.Bold,
 		modifier = Modifier
 			.fillMaxWidth()
-			.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp),
+			.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 6.dp),
 	)
 }
 

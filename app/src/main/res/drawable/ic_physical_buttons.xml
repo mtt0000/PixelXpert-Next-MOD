@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phone outline with a power key and a volume rocker on its right edge. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+	android:width="24dp"
+	android:height="24dp"
+	android:viewportWidth="24"
+	android:viewportHeight="24">
+	<path
+		android:fillColor="#FF000000"
+		android:pathData="M7,2h8a2,2 0,0 1,2 2v16a2,2 0,0 1,-2 2H7a2,2 0,0 1,-2 -2V4a2,2 0,0 1,2 -2zM7,4v16h8V4z" />
+	<path
+		android:fillColor="#FF000000"
+		android:pathData="M18,6h2v3h-2z" />
+	<path
+		android:fillColor="#FF000000"
+		android:pathData="M18,11h2v6h-2z" />
+</vector>
