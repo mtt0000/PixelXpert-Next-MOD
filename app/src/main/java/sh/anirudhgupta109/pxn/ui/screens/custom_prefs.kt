@@ -32,6 +32,7 @@ val custom_prefs: PrefScreen = PrefScreen(
 	title = R.string.custom_recents_category,
 	ignore = true,
 	children = listOf(
+				SwitchPref(key = "RecentClearAllReposition", title = R.string.clear_all_reposition_title, default = "false", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
 				SwitchPref(key = "RecentClearAllLegacyStyle", title = R.string.clear_all_legacy_style_title, summary = R.string.clear_all_legacy_style_summary, default = "false", dependency = "RecentClearAllReposition"),
 				SwitchPref(key = "RecentClearAllInActionBar", title = R.string.clear_all_in_action_bar_title, summary = R.string.clear_all_in_action_bar_summary, default = "false", dependency = "RecentClearAllReposition"),
 				SwitchPref(key = "RecentKillApp", title = R.string.kill_app_title, summary = R.string.kill_app_summary, default = "true"),

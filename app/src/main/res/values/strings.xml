@@ -277,7 +277,7 @@
     <string name="back_from_left_title">Left side of the screen</string>
     <string name="back_from_right_title">Right side of the screen</string>
     <string name="back_height_title">Gesture height</string>
-    <string name="gesturenav_header">Gestures</string>
+    <string name="gesturenav_header">Gestures &amp; Physical</string>
     <string name="gesture_nav_pill_cat">Navigation bar pill</string>
     <string name="gesture_nav_pill_width_title">Width compared to standard size</string>
     <string name="gesture_nav_pill_height_title">Height compared to standard size</string>
@@ -753,7 +753,8 @@
     <string name="action_power_menu">Power menu</string>
     <string name="action_auto_rotate">Toggle auto-rotate</string>
     <string name="action_volume_panel">Show the volume panel</string>
-    <string name="gestures_unified_summary">Edge gestures, back gesture, bottom swipes and the pill</string>
+    <string name="gestures_unified_summary">Edge gestures, back gesture, bottom swipes, the pill and physical buttons</string>
+    <string name="physical_buttons_summary">Power and volume presses and key combinations</string>
     <string name="edge_bottom_cat">Bottom edge</string>
     <string name="edge_orientation_title">Active in</string>
     <string name="edge_orientation_both">Portrait and landscape</string>

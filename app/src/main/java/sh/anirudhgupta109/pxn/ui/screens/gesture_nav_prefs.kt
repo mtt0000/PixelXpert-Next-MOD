@@ -26,6 +26,7 @@ val gesture_nav_prefs: PrefScreen = PrefScreen(
 	children = listOf(
 				NavRow(key = "gesture_statusbar", title = R.string.gesture_statusbar_title, summary = R.string.gesture_statusbar_summary, route = "gesture_statusbar", icon = R.drawable.ic_gesture_top_in),
 				NavRow(key = "gesture_screen", title = R.string.gesture_screen_title, summary = R.string.gesture_screen_summary, route = "gesture_screen", icon = R.drawable.ic_gesture_screen_double_tap),
+				NavRow(key = "remap_physical_buttons", title = R.string.remap_physical_buttons_title, summary = R.string.physical_buttons_summary, route = "physical_button_remap"),
 	),
 			),
 			Category(

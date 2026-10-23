@@ -260,7 +260,7 @@
     <string name="back_from_left_title">Bordo sinistro dello schermo</string>
     <string name="back_from_right_title">Bordo destro dello schermo</string>
     <string name="back_height_title">Altezza gesture</string>
-    <string name="gesturenav_header">Gesti</string>
+    <string name="gesturenav_header">Gesti e tasti fisici</string>
     <string name="gesture_nav_pill_cat">Pillola NavBar</string>
     <string name="gesture_nav_pill_width_title">Larghezza rispetto alla misura standard</string>
     <string name="gesture_nav_pill_height_title">Altezza rispetto alla misura standard</string>
@@ -686,7 +686,8 @@
     <string name="action_power_menu">Menu di spegnimento</string>
     <string name="action_auto_rotate">Attiva/disattiva rotazione automatica</string>
     <string name="action_volume_panel">Mostra il pannello del volume</string>
-    <string name="gestures_unified_summary">Gesti sui bordi, gesto Indietro, swipe dal basso e pillola</string>
+    <string name="gestures_unified_summary">Gesti sui bordi, gesto Indietro, swipe dal basso, pillola e tasti fisici</string>
+    <string name="physical_buttons_summary">Pressioni dei tasti accensione e volume e combinazioni</string>
     <string name="edge_bottom_cat">Bordo inferiore</string>
     <string name="edge_orientation_title">Attivo in</string>
     <string name="edge_orientation_both">Verticale e orizzontale</string>
