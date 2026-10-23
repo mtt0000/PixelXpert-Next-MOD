@@ -12,7 +12,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.UserManager
 import android.view.Display
-import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import de.robv.android.xposed.XposedHelpers.callMethod
 import de.robv.android.xposed.XposedHelpers.getIntField
@@ -153,21 +152,33 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 				}
 			}
 
-		ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ImageCaptureImpl")
+		val imageCaptureClass = ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ImageCaptureImpl")
+		imageCaptureClass
 			.afterConstruction()
 			.run { param -> imageCapture = param.thisObject }
 
-		// Runs on the main thread right after the actions provider was created for
-		// the new screenshot, so the button lands after the stock ones.
-		ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ScreenshotActionsController")
-			.after("setCurrentScreenshot")
+		// One ActionsCallback is built per screenshot, inside
+		// ScreenshotActionsController.setCurrentScreenshot and right before the
+		// actions provider adds the stock buttons through it. Hooking its
+		// constructor instead of setCurrentScreenshot / ScreenshotViewModel.addAction
+		// survives R8 on Pixel builds, where those single-caller methods can be
+		// inlined away; provideActionButton is called by every provider, so it stays.
+		// The post puts the button after the stock ones.
+		val actionsCallbackClass = ReflectedClass.ofIfPossible("com.android.systemui.screenshot.ScreenshotActionsController\$ActionsCallback")
+		if (actionsCallbackClass.clazz == null || imageCaptureClass.clazz == null) {
+			log("PXN ScrollCapture: ActionsCallback found: ${actionsCallbackClass.clazz != null}, ImageCaptureImpl found: ${imageCaptureClass.clazz != null}")
+		}
+		actionsCallbackClass
+			.afterConstruction()
 			.run { param ->
 				if (!ScreenshotAutoScroll) return@run
-				val controller = param.thisObject ?: return@run
-				try {
-					addAutoScrollButton(controller, param.args[0])
-				} catch (t: Throwable) {
-					log(t)
+				val callback = param.thisObject ?: return@run
+				mainHandler.post {
+					try {
+						addAutoScrollButton(callback)
+					} catch (t: Throwable) {
+						log("PXN ScrollCapture: could not add the button", t)
+					}
 				}
 			}
 
@@ -207,20 +218,33 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 			}
 	}
 
-	private fun addAutoScrollButton(controller: Any, screenshot: Any?) {
+	private fun addAutoScrollButton(callback: Any) {
+		val controller = runCatching { getObjectField(callback, "this\$0") }.getOrNull()
+		// The provider of this screenshot holds its request (ScreenshotData).
+		val provider = runCatching {
+			val id = getObjectField(callback, "screenshotId")
+			(getObjectField(controller, "actionProviders") as Map<*, *>)[id]
+		}.getOrNull()
+		val screenshot = runCatching { getObjectField(provider, "request") }.getOrNull()
+
 		// A provided image (an app handing SystemUI a bitmap) has nothing on screen to scroll.
 		val type = runCatching { getIntField(screenshot, "type") }.getOrDefault(-1)
 		if (type == TAKE_SCREENSHOT_PROVIDED_IMAGE) return
 		val displayId = runCatching { getIntField(screenshot, "displayId") }.getOrDefault(Display.DEFAULT_DISPLAY)
 
-		val viewModel = getObjectField(controller, "viewModel")
-		val addAction = viewModel.javaClass.methods.first { it.name == "addAction" && it.parameterTypes.size == 3 }
-		val loader = viewModel.javaClass.classLoader
+		// provideActionButton(appearance, showDuringEntrance, onClick: () -> Unit)
+		val provideActionButton = callback.javaClass.declaredMethods.firstOrNull { it.name == "provideActionButton" }
+			?: callback.javaClass.declaredMethods.first {
+				val types = it.parameterTypes
+				types.size == 3 && types[1] == Boolean::class.javaPrimitiveType && types[2].name == "kotlin.jvm.functions.Function0"
+			}
+		provideActionButton.isAccessible = true
+		val loader = callback.javaClass.classLoader
 
-		val onClick = Proxy.newProxyInstance(loader, arrayOf(addAction.parameterTypes[2])) { proxy, method, args ->
+		val onClick = Proxy.newProxyInstance(loader, arrayOf(provideActionButton.parameterTypes[2])) { proxy, method, args ->
 			when (method.name) {
 				"invoke" -> {
-					onAutoScrollClicked(controller, displayId)
+					onAutoScrollClicked(controller, provider, displayId)
 					Class.forName("kotlin.Unit", false, loader).getField("INSTANCE").get(null)
 				}
 				"equals" -> proxy === args?.getOrNull(0)
@@ -228,7 +252,8 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 				else -> "PXN auto-scroll capture"
 			}
 		}
-		addAction.invoke(viewModel, autoScrollAppearance(addAction.parameterTypes[0]), true, onClick)
+		val id = provideActionButton.invoke(callback, autoScrollAppearance(provideActionButton.parameterTypes[0]), true, onClick)
+		log("PXN ScrollCapture: button added (id $id, display $displayId)")
 	}
 
 	/**
@@ -261,24 +286,20 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 		return constructor.newInstance(*args.toTypedArray())
 	}
 
-	private fun onAutoScrollClicked(controller: Any, displayId: Int) {
+	private fun onAutoScrollClicked(controller: Any?, provider: Any?, displayId: Int) {
 		val capture = imageCapture
-		if (capture == null) {
-			XPLauncher.moduleResources?.getString(R.string.scroll_capture_failed)?.let {
-				Toast.makeText(mContext, it, Toast.LENGTH_SHORT).show()
-			}
-			return
-		}
+		if (capture == null) log("PXN ScrollCapture: ImageCaptureImpl instance not captured, capturing directly")
 		if (AutoScrollCapture.running) return
 		AutoScrollCapture.running = true
 
 		// The shelf has to be gone before the first frame is captured; the injected
 		// swipes would dismiss it anyway, as a touch outside.
 		try {
-			val viewProxy = getObjectField(getObjectField(controller, "actionExecutor"), "viewProxy")
-			callMethod(viewProxy, "requestDismissal", *arrayOf<Any?>(null))
+			val executor = runCatching { getObjectField(controller, "actionExecutor") }.getOrNull()
+				?: getObjectField(provider, "actionExecutor")
+			callMethod(getObjectField(executor, "viewProxy"), "requestDismissal", *arrayOf<Any?>(null))
 		} catch (t: Throwable) {
-			log(t)
+			log("PXN ScrollCapture: could not dismiss the shelf", t)
 		}
 		mainHandler.postDelayed({
 			try {
