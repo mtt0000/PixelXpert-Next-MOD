@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import de.robv.android.xposed.XposedHelpers.callMethod
 import de.robv.android.xposed.XposedHelpers.getObjectField
+import java.lang.reflect.Executable
 import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
 import java.util.UUID
@@ -127,52 +128,94 @@ class ScreenshotShelfButtons(
 
 	// ------------------------------------------------------------ route 1
 
+	/**
+	 * AOSP has provideActionButton(appearance, showDuringEntrance, onClick);
+	 * Google's build also has other overloads (one with 2 parameters), so the
+	 * widest non-synthetic one taking an appearance and a callback interface
+	 * is used and its arguments are filled by type.
+	 */
 	private fun addThroughCallback(callback: Any, withAutoScroll: Boolean) {
-		// provideActionButton(appearance, showDuringEntrance, onClick: () -> Unit)
-		val provide = callback.javaClass.declaredMethods.firstOrNull { it.name == "provideActionButton" }
-			?: callback.javaClass.declaredMethods.first {
-				val types = it.parameterTypes
-				types.size == 3 && types[1] == Boolean::class.javaPrimitiveType && types[2].name == FUNCTION0
-			}
+		val candidates = callback.javaClass.declaredMethods.filter {
+			!it.isSynthetic && !Modifier.isStatic(it.modifiers) &&
+				it.parameterTypes.any { type -> type.name == APPEARANCE } &&
+				it.parameterTypes.any { type -> isCallbackType(type) }
+		}
+		val provide = (candidates.filter { it.name == "provideActionButton" }.ifEmpty { candidates })
+			.maxByOrNull { it.parameterCount }
+			?: throw IllegalStateException("no provideActionButton among ${signatures(callback.javaClass.declaredMethods.toList())}")
 		provide.isAccessible = true
-		val appearanceClass = provide.parameterTypes[0]
-		val functionClass = provide.parameterTypes[2]
+		Logger.log("PXN ScreenshotButtons: using ${provide.name}${signature(provide)}")
 
 		if (withAutoScroll) {
-			provide.invoke(callback, autoScrollAppearance(appearanceClass), true, function(functionClass) { autoScrollClicked() })
+			provide.invoke(callback, *fillArgs(provide, R.drawable.ic_scroll_capture, R.string.scroll_capture_label, 0) { autoScrollClicked() })
 		}
 		if (deleteEnabled) {
-			provide.invoke(callback, deleteAppearance(appearanceClass), true, function(functionClass) { deleteClicked() })
+			provide.invoke(callback, *fillArgs(provide, R.drawable.ic_delete_screenshot, R.string.screenshot_delete_label, 0) { deleteClicked() })
 		}
 		Logger.log("PXN ScreenshotButtons: buttons added through ActionsCallback")
 	}
 
 	// ------------------------------------------------------------ route 2
 
+	/** ActionButtonViewModel(appearance, id, visible, showDuringEntrance, onClicked) in AOSP; filled by type too. */
 	private fun addThroughViewModel(viewModel: Any, withAutoScroll: Boolean) {
 		val loader = viewModel.javaClass.classLoader
 		val flow = getObjectField(viewModel, "_actions")
 		val current = callMethod(flow, "getValue") as List<*>
 
 		val itemClass = Class.forName("$PKG.ui.viewmodel.ActionButtonViewModel", false, loader)
-		// ActionButtonViewModel(appearance, id, visible, showDuringEntrance, onClicked)
-		val constructor = itemClass.constructors.first {
-			val types = it.parameterTypes
-			types.size == 5 && types[1] == Int::class.javaPrimitiveType && types[4].name == FUNCTION0
-		}
-		val appearanceClass = constructor.parameterTypes[0]
-		val functionClass = constructor.parameterTypes[4]
+		val constructor = itemClass.declaredConstructors
+			.filter { ctor ->
+				!ctor.isSynthetic &&
+					ctor.parameterTypes.any { it.name == APPEARANCE } &&
+					ctor.parameterTypes.any { isCallbackType(it) }
+			}
+			.maxByOrNull { it.parameterCount }
+			?: throw IllegalStateException("no ActionButtonViewModel constructor among ${signatures(itemClass.declaredConstructors.toList())}")
+		constructor.isAccessible = true
+		Logger.log("PXN ScreenshotButtons: using ActionButtonViewModel${signature(constructor)}")
 
 		val added = ArrayList<Any?>(current)
 		if (withAutoScroll) {
-			added += constructor.newInstance(autoScrollAppearance(appearanceClass), nextDirectId++, true, true, function(functionClass) { autoScrollClicked() })
+			added += constructor.newInstance(*fillArgs(constructor, R.drawable.ic_scroll_capture, R.string.scroll_capture_label, nextDirectId++) { autoScrollClicked() })
 		}
 		if (deleteEnabled) {
-			added += constructor.newInstance(deleteAppearance(appearanceClass), nextDirectId++, true, true, function(functionClass) { deleteClicked() })
+			added += constructor.newInstance(*fillArgs(constructor, R.drawable.ic_delete_screenshot, R.string.screenshot_delete_label, nextDirectId++) { deleteClicked() })
 		}
 		callMethod(flow, "setValue", added)
 		Logger.log("PXN ScreenshotButtons: buttons added through ScreenshotViewModel")
 	}
+
+	/**
+	 * Arguments for [target] by parameter type: the appearance, the first
+	 * callback interface runs [onClick], booleans are true (visible, shown
+	 * during the entrance animation, tinted), ints get [id], the rest null.
+	 */
+	private fun fillArgs(target: Executable, icon: Int, text: Int, id: Int, onClick: () -> Unit): Array<Any?> {
+		var callbackGiven = false
+		return target.parameterTypes.map { type ->
+			when {
+				type.name == APPEARANCE -> appearance(type, icon, text)
+				type == Boolean::class.javaPrimitiveType -> true
+				type == Int::class.javaPrimitiveType -> id
+				type == Long::class.javaPrimitiveType -> 0L
+				type == Float::class.javaPrimitiveType -> 0f
+				!callbackGiven && isCallbackType(type) -> {
+					callbackGiven = true
+					function(type, onClick)
+				}
+				else -> null
+			}
+		}.toTypedArray()
+	}
+
+	/** An interface that is not one of the plain data types an appearance or label could be. */
+	private fun isCallbackType(type: Class<*>): Boolean =
+		type.isInterface && type != CharSequence::class.java && !type.name.startsWith("java.util.")
+
+	private fun signature(target: Executable) = target.parameterTypes.joinToString(", ", "(", ")") { it.name }
+
+	private fun signatures(targets: List<Executable>) = targets.joinToString("; ") { it.name + signature(it) }
 
 	// ------------------------------------------------------------ actions
 
@@ -255,27 +298,26 @@ class ScreenshotShelfButtons(
 	private fun function(functionClass: Class<*>, block: () -> Unit): Any {
 		val loader = functionClass.classLoader
 		return Proxy.newProxyInstance(loader, arrayOf(functionClass)) { proxy, method, args ->
-			when (method.name) {
-				"invoke" -> {
+			when {
+				method.name == "equals" && method.parameterCount == 1 -> proxy === args?.getOrNull(0)
+				method.name == "hashCode" && method.parameterCount == 0 -> System.identityHashCode(proxy)
+				method.name == "toString" && method.parameterCount == 0 -> "PXN screenshot button"
+				else -> {
+					// invoke() for Function0, or whatever the interface's single method is.
 					try {
 						block()
 					} catch (t: Throwable) {
 						Logger.log(t)
 					}
-					Class.forName("kotlin.Unit", false, loader).getField("INSTANCE").get(null)
+					when (method.returnType) {
+						Void.TYPE -> null
+						Boolean::class.javaPrimitiveType -> true
+						else -> runCatching { Class.forName("kotlin.Unit", false, loader).getField("INSTANCE").get(null) }.getOrNull()
+					}
 				}
-				"equals" -> proxy === args?.getOrNull(0)
-				"hashCode" -> System.identityHashCode(proxy)
-				else -> "PXN screenshot button"
 			}
 		}
 	}
-
-	private fun autoScrollAppearance(appearanceClass: Class<*>) =
-		appearance(appearanceClass, R.drawable.ic_scroll_capture, R.string.scroll_capture_label)
-
-	private fun deleteAppearance(appearanceClass: Class<*>) =
-		appearance(appearanceClass, R.drawable.ic_delete_screenshot, R.string.screenshot_delete_label)
 
 	/**
 	 * `ActionButtonAppearance(icon, label, description, tint = true, ...)`: the
@@ -286,19 +328,24 @@ class ScreenshotShelfButtons(
 		val res = XPLauncher.moduleResources!!
 		val drawable = ResourcesCompat.getDrawable(res, icon, context.theme)
 		val label = res.getString(text)
-		val constructor = appearanceClass.constructors
+		val constructor = appearanceClass.declaredConstructors
 			.filter { ctor ->
-				val types = ctor.parameterTypes
-				types.size >= 3 &&
-					types[0] == Drawable::class.java &&
-					types[1] == CharSequence::class.java &&
-					types[2] == CharSequence::class.java
+				!ctor.isSynthetic &&
+					ctor.parameterTypes.any { it == Drawable::class.java } &&
+					ctor.parameterTypes.any { it == CharSequence::class.java || it == String::class.java }
 			}
-			.minBy { it.parameterTypes.size }
-		val args = constructor.parameterTypes.mapIndexed { index, type ->
+			.minByOrNull { it.parameterCount }
+			?: throw IllegalStateException("no ActionButtonAppearance constructor among ${signatures(appearanceClass.declaredConstructors.toList())}")
+		constructor.isAccessible = true
+		// The first Drawable is the icon (a later one is the custom background).
+		var iconGiven = false
+		val args = constructor.parameterTypes.map { type ->
 			when {
-				index == 0 -> drawable
-				index == 1 || index == 2 -> label
+				type == Drawable::class.java && !iconGiven -> {
+					iconGiven = true
+					drawable
+				}
+				type == CharSequence::class.java || type == String::class.java -> label
 				type == Boolean::class.javaPrimitiveType -> true
 				type == Int::class.javaPrimitiveType -> 0
 				else -> null
@@ -313,10 +360,10 @@ class ScreenshotShelfButtons(
 	}
 
 	private companion object {
-		const val FUNCTION0 = "kotlin.jvm.functions.Function0"
 		const val PKG = "com.android.systemui.screenshot"
 		const val ACTIONS_CALLBACK = "$PKG.ScreenshotActionsController\$ActionsCallback"
 		const val SAVED_RESULT = "$PKG.ScreenshotSavedResult"
+		const val APPEARANCE = "$PKG.ui.viewmodel.ActionButtonAppearance"
 
 		/** WindowManager.TAKE_SCREENSHOT_PROVIDED_IMAGE, hidden. */
 		const val TAKE_SCREENSHOT_PROVIDED_IMAGE = 3
