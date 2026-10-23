@@ -2,9 +2,11 @@ package sh.anirudhgupta109.pxn.xposed.modpacks.systemui
 
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Handler
@@ -19,8 +21,9 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
-import sh.anirudhgupta109.pxn.R
 import sh.anirudhgupta109.pxn.annotations.ChildProcessModPack
+import sh.anirudhgupta109.pxn.annotations.MainProcessModPack
+import sh.anirudhgupta109.pxn.xposed.XPLauncher
 import sh.anirudhgupta109.pxn.xposed.XPrefs.Xprefs
 import sh.anirudhgupta109.pxn.xposed.XposedModPack
 import sh.anirudhgupta109.pxn.xposed.annotations.SystemUIModPack
@@ -54,8 +57,16 @@ import sh.anirudhgupta109.pxn.xposed.utils.reflection.ReflectedClass
  * scrolls the app itself and stitches the frames, like Samsung's scroll
  * capture - one page per tap on its floating "Scroll" button, or by itself
  * until "Stop" / a tap on the screen when manual mode is off.
+ *
+ * Loaded in SystemUI's main process and in its `screenshot` child, but the
+ * hooks go in only where TakeScreenshotService actually runs (asked from the
+ * package manager): `:screenshot` in AOSP, possibly the main process on a
+ * vendor build. Without @MainProcessModPack nothing at all ran when the
+ * screenshot UI was not in the child process. Where the service runs cannot
+ * be told, both processes get the hooks.
  */
 @SystemUIModPack
+@MainProcessModPack
 @ChildProcessModPack(processNameContains = "screenshot")
 class ScreenshotManager(context: Context) : XposedModPack(context) {
 
@@ -64,6 +75,7 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 
 		private const val ACTION_SCREENSHOT_SHARED = "sh.anirudhgupta109.pxn.SCREENSHOT_SHARED"
 		private const val EXTRA_SHARED_URI = "pxn_shared_uri"
+		private const val TAKE_SCREENSHOT_SERVICE = "com.android.systemui.screenshot.TakeScreenshotService"
 
 		private const val SHELF_DISMISS_DELAY = 400L
 	}
@@ -99,6 +111,17 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 	}
 
 	override fun onPackageLoaded(PRParam: XposedModuleInterface.PackageReadyParam) {
+		val screenshotProcess = runCatching {
+			mContext.packageManager.getServiceInfo(
+				ComponentName(mContext.packageName, TAKE_SCREENSHOT_SERVICE),
+				PackageManager.ComponentInfoFlags.of(0),
+			).processName
+		}.getOrNull()
+		val here = XPLauncher.processName
+		log("PXN Screenshot: loaded in $here, $TAKE_SCREENSHOT_SERVICE runs in $screenshotProcess")
+		// The MediaPlayer hook below would silence the rest of SystemUI too.
+		if (screenshotProcess != null && screenshotProcess != here) return
+
 		val NewCaptureArgsClass = ReflectedClass.ofIfPossible("android.window.ScreenCaptureInternal.CaptureArgs") //A16QPR2
 		val CaptureArgsClass = ReflectedClass.ofIfPossible("android.window.ScreenCapture.CaptureArgs") //A16QPR1
 		val TakeScreenshotExecutorImplClass = ReflectedClass.of("com.android.systemui.screenshot.TakeScreenshotExecutorImpl")
