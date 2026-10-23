@@ -567,14 +567,33 @@
     <string name="hook_audit_waiting_desc">Ensure the module is enabled in LSPosed, target apps are selected in scope, and they have been restarted. Tap Refresh to request audit. A SystemUI restart might be needed!</string>
 
     <!--Custom Settings (added by the hide/kill/clipboard feature set)-->
-    <string name="custom_header">Impostazioni personalizzate</string>
-    <string name="custom_header_summary">Condivisione negli appunti, pulsanti Recenti e app nascoste</string>
+    <string name="custom_header">Altre impostazioni</string>
+    <string name="custom_header_summary">Condivisione negli appunti, screenshot, pulsanti Recenti e app nascoste</string>
     <string name="custom_share_category">Menu Condividi</string>
+    <string name="custom_screenshot_category">Screenshot</string>
     <string name="custom_recents_category">Recenti</string>
     <string name="clipboard_share_title">Copia negli appunti dal menu Condividi</string>
-    <string name="clipboard_share_summary">Aggiunge \"Copia contenuto negli appunti\" al menu di condivisione di Android</string>
+    <string name="clipboard_share_summary">Aggiunge \"Copia contenuto negli appunti\" al menu di condivisione di Android. Funziona con testo, file di testo e immagini</string>
     <string name="clipboard_share_label">Copia contenuto negli appunti</string>
     <string name="clipboard_share_done">Copiato negli appunti</string>
+    <string name="clipboard_share_image_done">Immagine copiata negli appunti</string>
+    <string name="screenshot_delete_shared_title">Elimina screenshot condivisi</string>
+    <string name="screenshot_delete_shared_summary">Gli screenshot condivisi dalla barra degli screenshot vengono rimossi dalla galleria. Se chiudi il menu Condividi lo screenshot resta</string>
+    <string name="screenshot_delete_shared_delay_title">Elimina gli screenshot condivisi dopo (secondi)</string>
+    <string name="screenshot_delete_shared_delay_summary">Tempo che l\'app di destinazione ha per leggere lo screenshot prima che venga eliminato</string>
+    <string name="screenshot_auto_scroll_title">Screenshot a scorrimento automatico</string>
+    <string name="screenshot_auto_scroll_summary">Aggiunge alla barra degli screenshot un pulsante \"Scorri\" che fa scorrere l\'app da solo e crea uno screenshot lungo, anche dove \"Cattura di più\" non è disponibile</string>
+    <string name="screenshot_auto_scroll_manual_title">Scorri toccando il pulsante</string>
+    <string name="screenshot_auto_scroll_manual_summary">Come Samsung: ogni tocco su \"Scorri\" aggiunge una pagina, \"Fine\" salva. Se disattivato scorre da solo fino a \"Stop\". Un tocco in un altro punto dello schermo termina sempre la cattura</string>
+    <string name="screenshot_auto_scroll_steps_title">Scorrimento automatico: numero massimo di scorrimenti</string>
+    <string name="screenshot_auto_scroll_steps_summary">Solo quando scorre da solo. La cattura si ferma anche a fine pagina</string>
+    <string name="scroll_capture_label">Scorri</string>
+    <string name="scroll_capture_scroll">Scorri</string>
+    <string name="scroll_capture_done">Fine</string>
+    <string name="scroll_capture_stop">Stop</string>
+    <string name="scroll_capture_saved">Screenshot a scorrimento salvato</string>
+    <string name="scroll_capture_nothing">Niente da scorrere in questa schermata</string>
+    <string name="scroll_capture_failed">Screenshot a scorrimento non riuscito</string>
     <string name="clipboard_share_nothing">Nessun contenuto da copiare</string>
     <string name="clipboard_share_failed">Impossibile accedere agli appunti</string>
     <string name="clear_all_legacy_style_title">Pulsante \"Cancella tutto\" rotondo</string>
