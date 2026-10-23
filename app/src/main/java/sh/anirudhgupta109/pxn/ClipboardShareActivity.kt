@@ -37,12 +37,35 @@ class ClipboardShareActivity : Activity() {
 		super.onCreate(savedInstanceState)
 
 		// No check on intent.type: a sender may share a stream without one.
-		when (intent?.action) {
-			Intent.ACTION_SEND -> handleSend(intent)
-			Intent.ACTION_SEND_MULTIPLE -> handleSendMultiple(intent)
+		// Nothing may escape: a crash here is silent, the activity has no window.
+		try {
+			Log.i(TAG, describe(intent))
+			when (intent?.action) {
+				Intent.ACTION_SEND -> handleSend(intent)
+				Intent.ACTION_SEND_MULTIPLE -> handleSendMultiple(intent)
+				else -> toast(getString(R.string.clipboard_share_nothing))
+			}
+		} catch (t: Throwable) {
+			Log.e(TAG, "Share to clipboard failed", t)
+			toast(getString(R.string.clipboard_share_read_failed, t.javaClass.simpleName + ": " + t.message))
 		}
 
 		finish()
+	}
+
+	/** What was shared, for `logcat -s ClipboardShareActivity`. */
+	private fun describe(intent: Intent?): String {
+		if (intent == null) return "No intent"
+		val extras = try {
+			intent.extras?.keySet()?.joinToString()
+		} catch (t: Throwable) {
+			"unreadable: $t"
+		}
+		val clip = intent.clipData?.let { clip ->
+			(0 until clip.itemCount).joinToString { i -> clip.getItemAt(i).uri?.toString() ?: "text" }
+		}
+		return "Received ${intent.action}, type ${intent.type}, flags 0x${Integer.toHexString(intent.flags)}, " +
+			"extras [$extras], clip [$clip], from ${referrer ?: callingPackage}"
 	}
 
 	private fun streamUris(intent: Intent): List<Uri> {
@@ -74,6 +97,7 @@ class ClipboardShareActivity : Activity() {
 		val files = ArrayList<Uri>()
 		for (uri in streamUris(intent)) {
 			val content = readTextContent(uri, intent.type)
+			Log.i(TAG, "$uri: provider type ${typeOf(uri)}, image ${sniffImageType(uri)}, text ${content?.length}")
 			if (content == null) {
 				files.add(uri)
 			} else if (content.isNotEmpty()) {
@@ -140,6 +164,12 @@ class ClipboardShareActivity : Activity() {
 	} catch (e: Exception) {
 		if (readError == null) readError = e
 		contentResolver.openAssetFileDescriptor(uri, "r")?.createInputStream()
+	}
+
+	private fun typeOf(uri: Uri): String? = try {
+		contentResolver.getType(uri)
+	} catch (t: Throwable) {
+		"error: $t"
 	}
 
 	/** The provider's type, unless it is missing or a catch-all, then the one the intent declares. */
@@ -234,6 +264,7 @@ class ClipboardShareActivity : Activity() {
 				}
 			}
 			clipboard.setPrimaryClip(clip)
+			Log.i(TAG, "Clip set: ${clip.description}, ${clip.itemCount} item(s), first ${files.firstOrNull()}")
 			val image = files.isNotEmpty() && (contentResolver.getType(files[0])?.startsWith("image/") == true)
 			toast(
 				getString(
