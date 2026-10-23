@@ -53,6 +53,11 @@ class ClipboardShareActivity : Activity() {
 			if (many != null) out.addAll(many.filterNotNull())
 		} catch (ignored: Throwable) {
 		}
+		// Some senders put the stream only in the intent's ClipData.
+		val clip = intent.clipData
+		if (clip != null) {
+			for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let { out.add(it) }
+		}
 		return out.distinct()
 	}
 
@@ -64,13 +69,13 @@ class ClipboardShareActivity : Activity() {
 
 		val uris = streamUris(intent)
 		for (uri in uris) {
-			val content = readTextContent(uri)
+			val content = readTextContent(uri, intent.type)
 			if (!content.isNullOrEmpty()) {
 				if (builder.isNotEmpty()) builder.append("\n")
 				builder.append(content)
 			}
 		}
-		copyToClipboard(builder.toString(), copyImages(uris))
+		copyToClipboard(builder.toString(), copyImages(uris, intent.type))
 	}
 
 	private fun handleSendMultiple(intent: Intent) {
@@ -78,14 +83,14 @@ class ClipboardShareActivity : Activity() {
 
 		val uris = streamUris(intent)
 		for (uri in uris) {
-			val content = readTextContent(uri)
+			val content = readTextContent(uri, intent.type)
 			if (!content.isNullOrEmpty()) parts.add(content)
 		}
 		if (parts.isEmpty()) {
 			val texts = intent.getCharSequenceArrayListExtra(Intent.EXTRA_TEXT)
 			texts?.forEach { if (it != null) parts.add(it.toString()) }
 		}
-		copyToClipboard(parts.joinToString("\n\n---\n\n"), copyImages(uris))
+		copyToClipboard(parts.joinToString("\n\n---\n\n"), copyImages(uris, intent.type))
 	}
 
 	/**
@@ -93,15 +98,8 @@ class ClipboardShareActivity : Activity() {
 	 * URIs. The previous copies are dropped first: the clipboard holds a single
 	 * clip, so they are no longer reachable anyway.
 	 */
-	private fun copyImages(uris: List<Uri>): List<Uri> {
-		val images = uris.mapNotNull { uri ->
-			val type = try {
-				contentResolver.getType(uri)
-			} catch (ignored: Throwable) {
-				null
-			}
-			if (type != null && type.startsWith("image/")) uri to type else null
-		}
+	private fun copyImages(uris: List<Uri>, intentType: String?): List<Uri> {
+		val images = uris.mapNotNull { uri -> imageType(uri, intentType)?.let { uri to it } }
 		if (images.isEmpty()) return emptyList()
 
 		val dir = File(cacheDir, CLIP_DIR)
@@ -128,10 +126,55 @@ class ClipboardShareActivity : Activity() {
 		return out
 	}
 
-	/** Text of [uri], or null when it is clearly not text (images, videos...) or unreadable. */
-	private fun readTextContent(uri: Uri): String? {
+	/** The provider's type, unless it is missing or a catch-all, then the one the intent declares. */
+	private fun declaredType(uri: Uri, intentType: String?): String? {
+		val resolved = try {
+			contentResolver.getType(uri)
+		} catch (ignored: Throwable) {
+			null
+		}
+		return resolved?.takeUnless { it in GENERIC_TYPES } ?: intentType?.takeUnless { it in GENERIC_TYPES }
+	}
+
+	/**
+	 * The image type of [uri], or null when it is not an image. The file's
+	 * first bytes win over what is declared: WhatsApp's provider, for one,
+	 * does not report a type for the media it shares.
+	 */
+	private fun imageType(uri: Uri, intentType: String?): String? {
+		sniffImageType(uri)?.let { return it }
+		val declared = declaredType(uri, intentType) ?: return null
+		return when {
+			!declared.startsWith("image/") -> null
+			declared == "image/*" -> "image/jpeg"
+			else -> declared
+		}
+	}
+
+	private fun sniffImageType(uri: Uri): String? {
+		val head = try {
+			contentResolver.openInputStream(uri)?.use { it.readNBytes(16) }
+		} catch (ignored: Throwable) {
+			null
+		} ?: return null
+		fun at(offset: Int, vararg bytes: Int) =
+			head.size >= offset + bytes.size && bytes.indices.all { head[offset + it] == bytes[it].toByte() }
+		return when {
+			at(0, 0xFF, 0xD8, 0xFF) -> "image/jpeg"
+			at(0, 0x89, 0x50, 0x4E, 0x47) -> "image/png"
+			at(0, 0x47, 0x49, 0x46, 0x38) -> "image/gif"
+			at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50) -> "image/webp"
+			at(4, 0x66, 0x74, 0x79, 0x70) && (at(8, 0x68, 0x65, 0x69, 0x63) || at(8, 0x6D, 0x69, 0x66, 0x31)) -> "image/heic"
+			at(0, 0x42, 0x4D) -> "image/bmp"
+			else -> null
+		}
+	}
+
+	/** Text of [uri], or null when it is not text (images, videos, any binary data) or unreadable. */
+	private fun readTextContent(uri: Uri, intentType: String?): String? {
 		return try {
-			val type = contentResolver.getType(uri)
+			if (sniffImageType(uri) != null) return null
+			val type = declaredType(uri, intentType)
 			val isText = type == null ||
 				type.startsWith("text/") ||
 				type == "application/json" ||
@@ -141,7 +184,8 @@ class ClipboardShareActivity : Activity() {
 
 			contentResolver.openInputStream(uri)?.use { stream ->
 				val bytes = stream.readNBytes(MAX_BYTES)
-				String(bytes, StandardCharsets.UTF_8)
+				// A NUL byte means binary data with no declared type, not text.
+				if (bytes.any { it == 0.toByte() }) null else String(bytes, StandardCharsets.UTF_8)
 			}
 		} catch (e: Exception) {
 			Log.e(TAG, "Error reading $uri", e)
@@ -181,5 +225,6 @@ class ClipboardShareActivity : Activity() {
 		const val TAG = "ClipboardShareActivity"
 		const val MAX_BYTES = 1024 * 1024
 		const val CLIP_DIR = "clipboard"
+		val GENERIC_TYPES = setOf("*/*", "application/octet-stream")
 	}
 }

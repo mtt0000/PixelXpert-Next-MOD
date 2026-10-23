@@ -171,7 +171,8 @@ class AutoScrollCapture(
 	 * Holds the first frame, the strips every scroll revealed and the last
 	 * frame. The rows that do not move between the first two frames (status
 	 * bar, toolbar, bottom bar / navigation bar) are taken as fixed header and
-	 * footer; for every following frame the vertical offset is the shift at
+	 * footer, together with the rows of floating buttons next to them; for
+	 * every following frame the vertical offset is the shift at
 	 * which the scrolling area of the new frame overlaps the previous one,
 	 * preferring the shift closest to the swipe length when several fit (blank
 	 * or repeating content).
@@ -197,6 +198,11 @@ class AutoScrollCapture(
 				// If nothing moved, findShift returns 0 below and strips stays empty.
 				top = fixedTop(prevHashes, hashes, statusBar)
 				bottom = fixedBottom(prevHashes, hashes, top)
+				// Floating buttons next to the bars join them, see overlayTop/overlayBottom.
+				val firstCells = cellHashes(first)
+				val curCells = cellHashes(cur)
+				bottom = overlayBottom(firstCells, curCells, height, top, bottom)
+				top = overlayTop(firstCells, curCells, height, top, bottom)
 				if (height - top - bottom < MIN_REGION) {
 					cur.recycle()
 					return false
@@ -544,6 +550,88 @@ class AutoScrollCapture(
 	}
 
 	/**
+	 * Floating buttons (WhatsApp's "new chat" and Meta AI buttons, a "scroll
+	 * down" chip) stay put while the rest of their rows scrolls, so those rows
+	 * never match at any shift - enough of them and no overlap is found - and
+	 * would be repeated in every strip. Going up from the fixed footer, rows
+	 * with a cell that did not move between the first two frames join it, gaps
+	 * of up to [overlayGap] rows (margins, rounded corners) included, within
+	 * the bottom [OVERLAY_MAX] of the screen. The footer is drawn from the
+	 * last frame, so the button ends up once, at the bottom.
+	 */
+	private fun overlayBottom(a: LongArray, b: LongArray, height: Int, top: Int, bottom: Int): Int {
+		val lowest = maxOf(top, height - (height * OVERLAY_MAX).toInt())
+		var result = bottom
+		var gap = 0
+		var y = height - 1 - bottom
+		while (y >= lowest) {
+			if (hasStaticCell(a, b, y)) {
+				result = height - y
+				gap = 0
+			} else if (++gap > overlayGap()) {
+				break
+			}
+			y--
+		}
+		return result
+	}
+
+	/** The same below the fixed header, within the top [OVERLAY_MAX] of the screen. */
+	private fun overlayTop(a: LongArray, b: LongArray, height: Int, top: Int, bottom: Int): Int {
+		val highest = minOf(height - bottom, top + (height * OVERLAY_MAX).toInt())
+		var result = top
+		var gap = 0
+		var y = top
+		while (y < highest) {
+			if (hasStaticCell(a, b, y)) {
+				result = y + 1
+				gap = 0
+			} else if (++gap > overlayGap()) {
+				break
+			}
+			y++
+		}
+		return result
+	}
+
+	private fun overlayGap(): Int = (OVERLAY_GAP_DP * context.resources.displayMetrics.density).toInt()
+
+	/** A non-blank column cell of row [y] that is the same in both frames. */
+	private fun hasStaticCell(a: LongArray, b: LongArray, y: Int): Boolean {
+		for (k in 0 until CELLS) {
+			val cell = a[y * CELLS + k]
+			if (cell != BLANK_ROW && cell == b[y * CELLS + k]) return true
+		}
+		return false
+	}
+
+	/** [CELLS] hashes per row, one per column band; a band of a single color is [BLANK_ROW]. */
+	private fun cellHashes(bitmap: Bitmap): LongArray {
+		val width = bitmap.width
+		val row = IntArray(width)
+		val cells = LongArray(bitmap.height * CELLS)
+		for (y in 0 until bitmap.height) {
+			bitmap.getPixels(row, 0, width, 0, y, width, 1)
+			for (k in 0 until CELLS) {
+				val from = k * width / CELLS
+				val to = (k + 1) * width / CELLS
+				val firstPixel = row[from]
+				var uniform = true
+				var hash = 1125899906842597L
+				var x = from
+				while (x < to) {
+					val pixel = row[x]
+					if (pixel != firstPixel) uniform = false
+					hash = 31 * hash + pixel
+					x += 2
+				}
+				cells[y * CELLS + k] = if (uniform) BLANK_ROW else hash
+			}
+		}
+		return cells
+	}
+
+	/**
 	 * How far the content of [cur] moved up compared to [prev] inside the
 	 * scrolling area, 0 if it did not move and -1 if no shift fits.
 	 */
@@ -689,6 +777,12 @@ class AutoScrollCapture(
 		private const val MATCH_RATIO = 0.02f
 		private const val ACCEPT_RATIO = 0.10f
 		private const val BLANK_ROW = 0L
+
+		/** Column bands per row for spotting floating buttons. */
+		private const val CELLS = 5
+		/** Share of the screen height, from the top or the bottom, floating buttons are looked for in. */
+		private const val OVERLAY_MAX = 0.3f
+		private const val OVERLAY_GAP_DP = 32
 
 		/** Keeps the stitched bitmap within a sane size for SystemUI. */
 		private const val MAX_HEIGHT = 20000
