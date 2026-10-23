@@ -35,6 +35,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import de.robv.android.xposed.XposedHelpers.callMethod
+import de.robv.android.xposed.XposedHelpers.callStaticMethod
 import java.lang.reflect.Proxy
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -67,11 +68,11 @@ import sh.anirudhgupta109.pxn.xposed.utils.toolkit.Logger
  *
  * The capture loop runs on its own thread; the bar, the input monitor and
  * the toasts live on the main thread. [imageCapture] is SystemUI's
- * `ImageCaptureImpl`.
+ * `ImageCaptureImpl`; without it the display is captured directly.
  */
 class AutoScrollCapture(
 	private val context: Context,
-	private val imageCapture: Any,
+	private val imageCapture: Any?,
 	private val displayId: Int,
 	private val maxSteps: Int,
 	private val manual: Boolean,
@@ -95,17 +96,17 @@ class AutoScrollCapture(
 	 * parameter does not break it - the int is the display, the rest is null
 	 * / false (no crop, defaults).
 	 */
-	private val captureDisplay = imageCapture.javaClass.methods.first {
+	private val captureDisplay = imageCapture?.javaClass?.methods?.firstOrNull {
 		it.name == "captureDisplay" && it.parameterTypes.firstOrNull() == Int::class.javaPrimitiveType
 	}
-	private val captureArgs: Array<Any?> = captureDisplay.parameterTypes.mapIndexed { index, type ->
+	private val captureArgs: Array<Any?> = captureDisplay?.parameterTypes?.mapIndexed { index, type ->
 		when {
 			index == 0 -> displayId
 			type == Boolean::class.javaPrimitiveType -> false
 			type == Int::class.javaPrimitiveType -> 0
 			else -> null
 		}
-	}.toTypedArray()
+	}?.toTypedArray() ?: emptyArray()
 
 	fun start() {
 		Thread({
@@ -354,7 +355,7 @@ class AutoScrollCapture(
 	 */
 	private fun startTapMonitor() {
 		try {
-			val loader = imageCapture.javaClass.classLoader
+			val loader = context.classLoader
 			val monitorClass = Class.forName("com.android.systemui.shared.system.InputMonitorCompat", false, loader)
 			val listenerClass = Class.forName("com.android.systemui.shared.system.InputChannelCompat\$InputEventListener", false, loader)
 			val monitor = monitorClass.getConstructor(String::class.java, Int::class.javaPrimitiveType)
@@ -431,10 +432,28 @@ class AutoScrollCapture(
 
 	/** Software copy of the display; the capture itself is a hardware bitmap. */
 	private fun capture(): Bitmap? {
-		val bitmap = captureDisplay.invoke(imageCapture, *captureArgs) as? Bitmap ?: return null
+		val bitmap = (if (captureDisplay != null) captureDisplay.invoke(imageCapture, *captureArgs) else captureDirect())
+			as? Bitmap ?: return null
 		val copy = bitmap.copy(Bitmap.Config.ARGB_8888, false)
 		bitmap.recycle()
 		return copy
+	}
+
+	/**
+	 * What ImageCaptureImpl.captureDisplay does, for when its instance could not
+	 * be captured: IWindowManager.captureDisplay with a sync listener -
+	 * ScreenCaptureInternal on 16 QPR2+, ScreenCapture before.
+	 */
+	@SuppressLint("PrivateApi")
+	private fun captureDirect(): Bitmap? {
+		val screenCapture = runCatching { Class.forName("android.window.ScreenCaptureInternal") }.getOrNull()
+			?: Class.forName("android.window.ScreenCapture")
+		val args = callMethod(Class.forName(screenCapture.name + "\$CaptureArgs\$Builder").getConstructor().newInstance(), "build")
+		val listener = callStaticMethod(screenCapture, "createSyncCaptureListener")
+		val windowManager = callStaticMethod(Class.forName("android.view.WindowManagerGlobal"), "getWindowManagerService")
+		callMethod(windowManager, "captureDisplay", displayId, args, listener)
+		val buffer = callMethod(listener, "getBuffer") ?: return null
+		return callMethod(buffer, "asBitmap") as? Bitmap
 	}
 
 	/** Captures until two frames in a row match, so smooth-scroll and overscroll have ended. */
