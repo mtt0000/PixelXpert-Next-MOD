@@ -628,7 +628,7 @@ class ScreenOffKeys(context: Context) : XposedModPack(context) {
 			.setPackage(Constants.SYSTEM_UI_PACKAGE)
 			.putExtra(SystemUIActions.EXTRA_KEY_ACTION, value)
 			.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-		mContext.sendBroadcastAsUser(intent, UserHandle.SYSTEM)
+		mContext.sendBroadcastAsUser(intent, UserHandle.of(0)) // SystemUI runs as the system user
 	}
 
 	@Suppress("DEPRECATION")
