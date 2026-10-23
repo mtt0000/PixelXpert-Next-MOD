@@ -10,6 +10,7 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
 import android.media.AudioManager
 import android.os.Handler
@@ -24,6 +25,9 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import de.robv.android.xposed.XposedHelpers.callMethod
 import de.robv.android.xposed.XposedHelpers.callStaticMethod
 import de.robv.android.xposed.XposedHelpers.getIntField
@@ -824,6 +828,7 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 
 	override fun onEdgeAdjustStart(view: EdgeGestureView) {
 		adjustLevel = readLevel(adjust[view.side])
+		log("EdgeGestures: pull and slide on ${SIDE_PREFIXES[view.side]}, kind ${adjust[view.side]}, from ${(adjustLevel * 100).roundToInt()}%")
 		showLevel(view.side)
 	}
 
@@ -840,20 +845,102 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 	override fun onEdgeAdjustEnd(view: EdgeGestureView) {
 		if (adjust[view.side] == ADJUST_BRIGHTNESS) writeLevel(ADJUST_BRIGHTNESS, adjustLevel, persist = true)
 		effects[view.side]?.release()
+		hideLevelToast()
 	}
 
+	private var levelToast: LinearLayout? = null
+	private var levelIcon: ImageView? = null
+	private var levelText: TextView? = null
+	private val hideLevelRunnable = Runnable { removeLevelToast() }
+
+	/**
+	 * The level while it is being adjusted, shown the way Edge Gestures shows
+	 * it (its `layout_toast`): a card in the middle of the screen - #50000000
+	 * with 5dp corners, 12/24dp padding - holding a 30x40dp icon of what is
+	 * adjusted and the percentage in large white text, in a window of its own
+	 * that takes no touches.
+	 */
 	private fun showLevel(side: Int) {
-		val name = when (adjust[side]) {
-			ADJUST_BRIGHTNESS -> R.string.edge_adjust_brightness
-			ADJUST_MEDIA -> R.string.edge_adjust_media
-			ADJUST_RINGTONE -> R.string.edge_adjust_ringtone
-			ADJUST_NOTIFICATION -> R.string.edge_adjust_notification
-			else -> R.string.edge_adjust_system
+		val iconRes = when (adjust[side]) {
+			ADJUST_BRIGHTNESS -> R.drawable.ic_level_brightness
+			ADJUST_RINGTONE -> R.drawable.ic_level_ringtone
+			ADJUST_NOTIFICATION -> R.drawable.ic_level_notification
+			else -> R.drawable.ic_level_volume
 		}
-		effects[side]?.showLevel(
-			SystemUIActions.string(name) + " " + (adjustLevel * 100).roundToInt() + "%",
-			adjustLevel,
-		)
+		val percent = (adjustLevel * 100).roundToInt().toString() + "%"
+		mainHandler.removeCallbacks(hideLevelRunnable)
+
+		val existing = levelToast
+		if (existing != null) {
+			existing.animate().cancel()
+			existing.alpha = 1f
+			levelText?.text = percent
+			levelIcon?.tag?.let { if (it != iconRes) setLevelIcon(iconRes) }
+			return
+		}
+
+		try {
+			val context = windowContext()
+			val density = context.resources.displayMetrics.density
+			val card = LinearLayout(context).apply {
+				orientation = LinearLayout.VERTICAL
+				gravity = Gravity.CENTER_HORIZONTAL
+				setPadding((12 * density).roundToInt(), (24 * density).roundToInt(), (12 * density).roundToInt(), (24 * density).roundToInt())
+				background = GradientDrawable().apply {
+					setColor(0x50000000)
+					cornerRadius = 5 * density
+				}
+			}
+			val icon = ImageView(context)
+			card.addView(icon, LinearLayout.LayoutParams((30 * density).roundToInt(), (40 * density).roundToInt()))
+			val text = TextView(context).apply {
+				setTextColor(Color.WHITE)
+				textSize = 22f
+				gravity = Gravity.CENTER_HORIZONTAL
+				minWidth = (80 * density).roundToInt()
+				setPadding(0, (8 * density).roundToInt(), 0, 0)
+				this.text = percent
+			}
+			card.addView(text, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+			levelToast = card
+			levelIcon = icon
+			levelText = text
+			setLevelIcon(iconRes)
+
+			val params = overlayParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, touchable = false).apply {
+				gravity = Gravity.CENTER
+				title = "PixelXpertEdgeLevel"
+			}
+			windowManager!!.addView(card, params)
+		} catch (t: Throwable) {
+			log(t)
+			levelToast = null
+		}
+	}
+
+	private fun setLevelIcon(iconRes: Int) {
+		val icon = levelIcon ?: return
+		try {
+			icon.setImageDrawable(XPLauncher.moduleResources!!.getDrawable(iconRes, null))
+			icon.tag = iconRes
+		} catch (ignored: Throwable) {
+		}
+	}
+
+	/** Fades the level card out shortly after the finger lifts. */
+	private fun hideLevelToast() {
+		val card = levelToast ?: return
+		mainHandler.removeCallbacks(hideLevelRunnable)
+		card.animate().alpha(0f).setStartDelay(600).setDuration(200).start()
+		mainHandler.postDelayed(hideLevelRunnable, 850)
+	}
+
+	private fun removeLevelToast() {
+		levelToast?.let { removeWindow(it) }
+		levelToast = null
+		levelIcon = null
+		levelText = null
 	}
 
 	private fun streamOf(kind: Int): Int = when (kind) {
