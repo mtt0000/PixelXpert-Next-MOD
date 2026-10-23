@@ -30,6 +30,16 @@ object FrameworkInspector {
 		frameworkItems.add(
 			InspectionUtils.checkMethod(
 				loader,
+				"com.android.server.pm.AppsFilterBase",
+				"shouldFilterApplication",
+				"AppsFilterBase#shouldFilterApplication (Share to clipboard from any app)",
+				utilized = true,
+			)
+		)
+
+		frameworkItems.add(
+			InspectionUtils.checkMethod(
+				loader,
 				"com.android.server.policy.PhoneWindowManager",
 				"interceptKeyBeforeQueueing",
 				"PhoneWindowManager#interceptKeyBeforeQueueing",
