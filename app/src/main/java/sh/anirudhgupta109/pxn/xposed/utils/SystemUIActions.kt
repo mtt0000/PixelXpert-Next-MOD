@@ -127,6 +127,7 @@ object SystemUIActions {
 	const val ACTION_VOLUME_UP = 60
 	const val ACTION_VOLUME_DOWN = 61
 	const val ACTION_TOGGLE_MUTE = 62
+	const val ACTION_FIND_IN_APP = 63
 
 	/** Actions only the edge gestures pack can run, because they need its windows. */
 	val EDGE_ACTIONS = setOf(
@@ -199,6 +200,7 @@ object SystemUIActions {
 			ACTION_SEARCH -> injectKey(context, KeyEvent.KEYCODE_SEARCH)
 			ACTION_PASTE -> injectKey(context, KeyEvent.KEYCODE_PASTE)
 			ACTION_FORWARD -> injectKey(context, KeyEvent.KEYCODE_FORWARD)
+			ACTION_FIND_IN_APP -> injectCtrlKey(context, KeyEvent.KEYCODE_F)
 			ACTION_PREVIOUS_APP -> switchToPreviousApp(context)
 			ACTION_KILL_APP -> killForegroundApp(context)
 			ACTION_NOTIFICATION -> callMethod(context.getSystemService("statusbar"), "expandNotificationsPanel")
@@ -271,6 +273,33 @@ object SystemUIActions {
 				),
 			)
 		}
+	}
+
+	/**
+	 * Ctrl+[keyCode] as a hardware keyboard types it - Ctrl down, the key down
+	 * and up with the Ctrl meta state, Ctrl up - so apps that handle keyboard
+	 * shortcuts (Ctrl+F: find in page / in app) see a real chord.
+	 */
+	@JvmStatic
+	fun injectCtrlKey(context: Context, keyCode: Int) {
+		val downTime = SystemClock.uptimeMillis()
+		val ctrl = KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON
+		fun key(action: Int, code: Int, meta: Int) = KeyEvent(
+			downTime,
+			SystemClock.uptimeMillis(),
+			action,
+			code,
+			0,
+			meta,
+			KeyCharacterMap.VIRTUAL_KEYBOARD,
+			0,
+			KeyEvent.FLAG_FROM_SYSTEM,
+			InputDevice.SOURCE_KEYBOARD,
+		)
+		inject(context, key(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_CTRL_LEFT, ctrl))
+		inject(context, key(KeyEvent.ACTION_DOWN, keyCode, ctrl))
+		inject(context, key(KeyEvent.ACTION_UP, keyCode, ctrl))
+		inject(context, key(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_CTRL_LEFT, 0))
 	}
 
 	@JvmStatic

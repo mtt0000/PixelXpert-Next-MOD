@@ -577,6 +577,8 @@
     <string name="clipboard_share_label">Copia contenuto negli appunti</string>
     <string name="clipboard_share_done">Copiato negli appunti</string>
     <string name="clipboard_share_image_done">Immagine copiata negli appunti</string>
+    <string name="clipboard_share_file_done">File copiato negli appunti</string>
+    <string name="clipboard_share_read_failed">Impossibile leggere il contenuto condiviso (%1$s)</string>
     <string name="screenshot_delete_shared_title">Elimina screenshot condivisi</string>
     <string name="screenshot_delete_shared_summary">Gli screenshot condivisi dalla barra degli screenshot vengono rimossi dalla galleria. Se chiudi il menu Condividi lo screenshot resta</string>
     <string name="screenshot_delete_shared_delay_title">Elimina gli screenshot condivisi dopo (secondi)</string>
@@ -763,6 +765,8 @@
     <string name="action_voice_command">Comando vocale</string>
     <string name="action_search">Cerca</string>
     <string name="action_paste">Incolla</string>
+    <string name="action_find_in_app">Cerca nell\'app (Ctrl+F)</string>
+    <string name="action_search_hint">Cerca azioni</string>
     <string name="action_app_info">Info sull\'app corrente</string>
     <string name="action_internet_panel">Pannello Internet</string>
     <string name="action_wifi_panel">Pannello Wi-Fi</string>

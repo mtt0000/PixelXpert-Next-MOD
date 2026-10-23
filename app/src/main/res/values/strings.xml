@@ -666,6 +666,8 @@
     <string name="clipboard_share_label">Copy content in clipboard</string>
     <string name="clipboard_share_done">Copied to clipboard</string>
     <string name="clipboard_share_image_done">Image copied to clipboard</string>
+    <string name="clipboard_share_file_done">File copied to clipboard</string>
+    <string name="clipboard_share_read_failed">Could not read the shared content (%1$s)</string>
     <string name="clipboard_share_nothing">No content found to copy</string>
     <string name="clipboard_share_failed">Failed to get clipboard service</string>
     <string name="clear_all_legacy_style_title">Round \"Clear all\" button</string>
@@ -830,6 +832,8 @@
     <string name="action_voice_command">Voice command</string>
     <string name="action_search">Search</string>
     <string name="action_paste">Paste</string>
+    <string name="action_find_in_app">Find in app (Ctrl+F)</string>
+    <string name="action_search_hint">Search actions</string>
     <string name="action_app_info">Current app info</string>
     <string name="action_internet_panel">Internet panel</string>
     <string name="action_wifi_panel">Wi-Fi panel</string>

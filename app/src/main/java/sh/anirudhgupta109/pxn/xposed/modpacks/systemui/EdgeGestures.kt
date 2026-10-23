@@ -122,6 +122,7 @@ class EdgeGestures(context: Context) : XposedModPack(context), EdgeGestureView.L
 			SystemUIActions.ACTION_RECENTS to listOf("ic_sysbar_recent", "ic_menu_recent_history"),
 			SystemUIActions.ACTION_PREVIOUS_APP to listOf("ic_media_rew"),
 			SystemUIActions.ACTION_FORWARD to listOf("ic_media_ff"),
+			SystemUIActions.ACTION_FIND_IN_APP to listOf("ic_menu_search"),
 			SystemUIActions.ACTION_NOTIFICATION to listOf("ic_notifications_alert", "ic_popup_reminder"),
 			SystemUIActions.ACTION_QUICK_SETTINGS to listOf("ic_settings", "ic_menu_preferences"),
 			SystemUIActions.ACTION_POWER_MENU to listOf("ic_lock_power_off"),

@@ -120,6 +120,7 @@
 		<item>@string/assistant</item>
 		<item>@string/action_voice_command</item>
 		<item>@string/action_search</item>
+		<item>@string/action_find_in_app</item>
 		<item>@string/camera</item>
 		<item>@string/app_switch_tile_title</item>
 		<item>@string/action_tap_through</item>
@@ -184,6 +185,7 @@
 		<item>17</item>
 		<item>31</item>
 		<item>32</item>
+		<item>63</item>
 		<item>22</item>
 		<item>8</item>
 		<item>25</item>

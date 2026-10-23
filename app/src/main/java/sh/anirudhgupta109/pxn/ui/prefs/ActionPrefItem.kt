@@ -17,11 +17,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
+import java.text.Normalizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import sh.anirudhgupta109.pxn.R
@@ -129,35 +136,62 @@ internal fun ActionPrefItem(node: ActionPref, store: PrefStore) {
 	if (open) {
 		val labels = remember(context) { context.resources.getStringArray(R.array.edge_action_titles).toList() }
 		val values = remember(context) { context.resources.getStringArray(R.array.edge_action_codes).toList() }
+		var query by remember { mutableStateOf("") }
+		val appText = stringResource(R.string.action_pick_app)
+		val shortcutText = stringResource(R.string.action_pick_shortcut)
+		val matching = values.indices.filter { matchesQuery(labels.getOrElse(it) { values[it] }, query) }
 
 		AlertDialog(
 			onDismissRequest = { open = false },
 			title = { Text(titleText(node)) },
 			text = {
-				LazyColumn(modifier = Modifier.fillMaxWidth()) {
-					item(key = "_app") {
-						ChoiceRow(
-							text = stringResource(R.string.action_pick_app),
-							selected = current.startsWith(ACTION_APP_PREFIX),
-						) {
-							open = false
-							pickApp = true
+				Column(modifier = Modifier.fillMaxWidth()) {
+					OutlinedTextField(
+						value = query,
+						onValueChange = { query = it },
+						singleLine = true,
+						placeholder = { Text(stringResource(R.string.action_search_hint)) },
+						leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+						trailingIcon = {
+							if (query.isNotEmpty()) {
+								IconButton(onClick = { query = "" }) {
+									Icon(Icons.Default.Clear, contentDescription = stringResource(android.R.string.cancel))
+								}
+							}
+						},
+						modifier = Modifier
+							.fillMaxWidth()
+							.padding(bottom = 8.dp),
+					)
+					LazyColumn(modifier = Modifier.fillMaxWidth()) {
+						if (matchesQuery(appText, query)) {
+							item(key = "_app") {
+								ChoiceRow(
+									text = appText,
+									selected = current.startsWith(ACTION_APP_PREFIX),
+								) {
+									open = false
+									pickApp = true
+								}
+							}
 						}
-					}
-					item(key = "_shortcut") {
-						ChoiceRow(
-							text = stringResource(R.string.action_pick_shortcut),
-							selected = current.startsWith(ACTION_INTENT_PREFIX),
-						) {
-							open = false
-							pickShortcut = true
+						if (matchesQuery(shortcutText, query)) {
+							item(key = "_shortcut") {
+								ChoiceRow(
+									text = shortcutText,
+									selected = current.startsWith(ACTION_INTENT_PREFIX),
+								) {
+									open = false
+									pickShortcut = true
+								}
+								HorizontalDivider()
+							}
 						}
-						HorizontalDivider()
-					}
-					items(values.indices.toList(), key = { values[it] }) { i ->
-						ChoiceRow(text = labels.getOrElse(i) { values[i] }, selected = values[i] == current) {
-							store.write(node, values[i])
-							open = false
+						items(matching, key = { values[it] }) { i ->
+							ChoiceRow(text = labels.getOrElse(i) { values[i] }, selected = values[i] == current) {
+								store.write(node, values[i])
+								open = false
+							}
 						}
 					}
 				}
@@ -196,6 +230,22 @@ internal fun ActionPrefItem(node: ActionPref, store: PrefStore) {
 		)
 	}
 }
+
+/**
+ * Whether [text] contains every word of [query], ignoring case and accents,
+ * so "cerca app" finds "Cerca nell'app".
+ */
+private fun matchesQuery(text: String, query: String): Boolean {
+	val words = foldForSearch(query).split(' ').filter { it.isNotEmpty() }
+	if (words.isEmpty()) return true
+	val folded = foldForSearch(text)
+	return words.all { folded.contains(it) }
+}
+
+private fun foldForSearch(text: String): String =
+	Normalizer.normalize(text, Normalizer.Form.NFD)
+		.replace(Regex("\\p{Mn}+"), "")
+		.lowercase()
 
 @Composable
 private fun ChoiceRow(text: String, selected: Boolean, onClick: () -> Unit) {
