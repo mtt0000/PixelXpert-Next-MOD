@@ -854,4 +854,8 @@
     <string name="gesture_statusbar_summary">Quick settings pull-down and pull-up, double tap to sleep, long press</string>
     <string name="gesture_screen_title">Lock screen and screen off</string>
     <string name="gesture_screen_summary">Double tap to sleep or wake, torch, ambient display</string>
+    <string name="system_back_category_title">Android back gesture (system)</string>
+    <string name="system_back_summary">Android\'s own back gesture, with its arrow and preview. It works along the whole edge and does not depend on the PixelXpert edge areas below</string>
+    <string name="edge_strip_category_title">PixelXpert edge area</string>
+    <string name="edge_side_enabled_summary">Touch strip of PixelXpert: taps, swipes and pull and slide, with the actions you choose</string>
 </resources>

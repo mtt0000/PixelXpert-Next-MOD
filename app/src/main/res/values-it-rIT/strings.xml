@@ -787,4 +787,8 @@
     <string name="gesture_statusbar_summary">Apertura e chiusura delle impostazioni rapide, doppio tocco per spegnere, pressione prolungata</string>
     <string name="gesture_screen_title">Schermata di blocco e schermo spento</string>
     <string name="gesture_screen_summary">Doppio tocco per spegnere o riattivare, torcia, display ambient</string>
+    <string name="system_back_category_title">Gesto Indietro di Android (sistema)</string>
+    <string name="system_back_summary">Il gesto Indietro originale di Android, con freccia e anteprima. Funziona su tutto il bordo e non dipende dalle aree dei gesti di PixelXpert qui sotto</string>
+    <string name="edge_strip_category_title">Area dei gesti sul bordo (PixelXpert)</string>
+    <string name="edge_side_enabled_summary">Striscia di tocco di PixelXpert: tocchi, swipe e tira e scorri, con le azioni che scegli</string>
 </resources>

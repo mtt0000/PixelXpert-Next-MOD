@@ -8,10 +8,18 @@ val edge_right_prefs: PrefScreen = PrefScreen(
 	key = "edge_right_prefs",
 	nodes = listOf(
 			Category(
-	title = R.string.edge_right_cat,
+	title = R.string.system_back_category_title,
 	ignore = true,
 	children = listOf(
-				SwitchPref(key = "EdgeRightEnabled", title = R.string.edge_side_enabled_title, default = "true", dependency = "EdgeGesturesEnabled", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
+				SwitchPref(key = "BackFromRight", title = R.string.back_gesture_on_edge_title, summary = R.string.system_back_summary, default = "true", icon = R.drawable.ic_gesture_right_in),
+				SliderPref(key = "BackRightHeight", title = R.string.back_height_title, default = "100", min = 10f, max = 100f, continuous = true),
+	),
+			),
+			Category(
+	title = R.string.edge_strip_category_title,
+	ignore = true,
+	children = listOf(
+				SwitchPref(key = "EdgeRightEnabled", title = R.string.edge_side_enabled_title, summary = R.string.edge_side_enabled_summary, default = "true", dependency = "EdgeGesturesEnabled"),
 				ListPref(key = "EdgeRightOrientation", title = R.string.edge_orientation_title, default = "3", entries = R.array.edge_orientation_titles, entryValues = R.array.edge_orientation_codes, dependency = "EdgeGesturesEnabled"),
 				SliderPref(key = "EdgeRightLength", title = R.string.edge_length_title, default = "50", min = 10f, max = 100f, step = 1f, dependency = "EdgeGesturesEnabled"),
 				SliderPref(key = "EdgeRightPosition", title = R.string.edge_position_title, default = "50", min = 0f, max = 100f, step = 1f, dependency = "EdgeGesturesEnabled"),
@@ -64,14 +72,6 @@ val edge_right_prefs: PrefScreen = PrefScreen(
 				ActionPref(key = "EdgeRightSwipeDiagDown", title = R.string.edge_gesture_diag_down, default = "-1", dependency = "EdgeGesturesEnabled", icon = R.drawable.ic_gesture_right_diag_down),
 				ActionPref(key = "EdgeRightLongSwipeDiagUp", title = R.string.edge_gesture_long_diag_up, default = "-1", dependency = "EdgeGesturesEnabled", icon = R.drawable.ic_gesture_right_long_diag_up),
 				ActionPref(key = "EdgeRightLongSwipeDiagDown", title = R.string.edge_gesture_long_diag_down, default = "-1", dependency = "EdgeGesturesEnabled", icon = R.drawable.ic_gesture_right_long_diag_down),
-	),
-			),
-			Category(
-	title = R.string.back_gesture_category_title,
-	ignore = true,
-	children = listOf(
-				SwitchPref(key = "BackFromRight", title = R.string.back_gesture_on_edge_title, default = "true", icon = R.drawable.ic_gesture_right_in),
-				SliderPref(key = "BackRightHeight", title = R.string.back_height_title, default = "100", min = 10f, max = 100f, continuous = true),
 	),
 			),
 	),

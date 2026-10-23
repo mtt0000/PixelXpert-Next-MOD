@@ -11,7 +11,7 @@ val edge_bottom_prefs: PrefScreen = PrefScreen(
 	title = R.string.edge_bottom_cat,
 	ignore = true,
 	children = listOf(
-				SwitchPref(key = "EdgeBottomEnabled", title = R.string.edge_side_enabled_title, default = "false", dependency = "EdgeGesturesEnabled", summaryOn = R.string.general_on, summaryOff = R.string.general_off),
+				SwitchPref(key = "EdgeBottomEnabled", title = R.string.edge_side_enabled_title, summary = R.string.edge_side_enabled_summary, default = "false", dependency = "EdgeGesturesEnabled"),
 				ListPref(key = "EdgeBottomOrientation", title = R.string.edge_orientation_title, default = "3", entries = R.array.edge_orientation_titles, entryValues = R.array.edge_orientation_codes, dependency = "EdgeGesturesEnabled"),
 				SliderPref(key = "EdgeBottomLength", title = R.string.edge_width_title, default = "60", min = 10f, max = 100f, step = 1f, dependency = "EdgeGesturesEnabled"),
 				SliderPref(key = "EdgeBottomPosition", title = R.string.edge_hposition_title, default = "50", min = 0f, max = 100f, step = 1f, dependency = "EdgeGesturesEnabled"),
