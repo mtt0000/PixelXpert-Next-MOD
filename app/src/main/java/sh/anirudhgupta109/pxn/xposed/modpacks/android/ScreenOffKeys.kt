@@ -7,7 +7,6 @@ import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.os.UserHandle
 import android.os.VibrationAttributes.USAGE_ACCESSIBILITY
 import android.os.VibrationEffect.EFFECT_TICK
 import android.view.InputDevice
@@ -628,7 +627,7 @@ class ScreenOffKeys(context: Context) : XposedModPack(context) {
 			.setPackage(Constants.SYSTEM_UI_PACKAGE)
 			.putExtra(SystemUIActions.EXTRA_KEY_ACTION, value)
 			.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-		mContext.sendBroadcastAsUser(intent, UserHandle.of(0)) // SystemUI runs as the system user
+		mContext.sendBroadcast(intent)
 	}
 
 	@Suppress("DEPRECATION")
