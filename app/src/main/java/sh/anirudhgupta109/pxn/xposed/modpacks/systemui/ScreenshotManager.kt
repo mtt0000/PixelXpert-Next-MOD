@@ -117,10 +117,8 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 				PackageManager.ComponentInfoFlags.of(0),
 			).processName
 		}.getOrNull()
-		val here = XPLauncher.processName
-		log("PXN Screenshot: loaded in $here, $TAKE_SCREENSHOT_SERVICE runs in $screenshotProcess")
 		// The MediaPlayer hook below would silence the rest of SystemUI too.
-		if (screenshotProcess != null && screenshotProcess != here) return
+		if (screenshotProcess != null && screenshotProcess != XPLauncher.processName) return
 
 		val NewCaptureArgsClass = ReflectedClass.ofIfPossible("android.window.ScreenCaptureInternal.CaptureArgs") //A16QPR2
 		val CaptureArgsClass = ReflectedClass.ofIfPossible("android.window.ScreenCapture.CaptureArgs") //A16QPR1
@@ -221,7 +219,6 @@ class ScreenshotManager(context: Context) : XposedModPack(context) {
 	/** The shelf is already being dismissed by [ScreenshotShelfButtons]; it has to be gone before the first frame. */
 	private fun onAutoScrollClicked(displayId: Int) {
 		val capture = imageCapture
-		if (capture == null) log("PXN ScrollCapture: ImageCaptureImpl instance not captured, capturing directly")
 		if (AutoScrollCapture.running) return
 		AutoScrollCapture.running = true
 

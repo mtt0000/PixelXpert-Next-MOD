@@ -34,7 +34,9 @@ import sh.anirudhgupta109.pxn.xposed.utils.toolkit.Logger
  *  2. otherwise, appending ActionButtonViewModels straight to the `_actions`
  *     flow of the ScreenshotViewModel (whose addAction R8 removed).
  * The objects are found by field type, not field name, from the controller
- * down. Every step logs with the "PXN ScreenshotButtons:" prefix.
+ * down; Google's signatures differ from AOSP's, so arguments are filled by
+ * parameter type. Both buttons are icon-only, like the stock edit button: the
+ * text is only their content description.
  */
 class ScreenshotShelfButtons(
 	private val context: Context,
@@ -62,16 +64,10 @@ class ScreenshotShelfButtons(
 	fun hook() {
 		val controllerClass = ReflectedClass.ofIfPossible("$PKG.ScreenshotController")
 		val savedResultClass = ReflectedClass.ofIfPossible(SAVED_RESULT)
-		Logger.log(
-			"PXN ScreenshotButtons: classes - ScreenshotController ${controllerClass.clazz != null}, " +
-				"ScreenshotSavedResult ${savedResultClass.clazz != null}",
-		)
-
-		val hooks = controllerClass
+		controllerClass
 			.after("handleScreenshot")
 			.run { param ->
 				shotStartedAt = SystemClock.uptimeMillis()
-				Logger.log("PXN ScreenshotButtons: new screenshot (auto-scroll $autoScrollEnabled, delete $deleteEnabled)")
 				if (!autoScrollEnabled && !deleteEnabled) return@run
 				val controller = param.thisObject ?: return@run
 				val screenshot = param.args.getOrNull(0)
@@ -80,11 +76,10 @@ class ScreenshotShelfButtons(
 					try {
 						addButtons(controller, screenshot)
 					} catch (t: Throwable) {
-						Logger.log("PXN ScreenshotButtons: could not add the buttons", t)
+						Logger.log(t)
 					}
 				}
 			}
-		Logger.log("PXN ScreenshotButtons: handleScreenshot hooks: ${hooks.size}")
 
 		savedResultClass
 			.afterConstruction()
@@ -108,17 +103,13 @@ class ScreenshotShelfButtons(
 		val type = runCatching { getObjectField(screenshot, "type") as Int }.getOrDefault(-1)
 		displayId = runCatching { getObjectField(screenshot, "displayId") as Int }.getOrDefault(0)
 		val withAutoScroll = autoScrollEnabled && type != TAKE_SCREENSHOT_PROVIDED_IMAGE
-		Logger.log(
-			"PXN ScreenshotButtons: provider ${provider?.javaClass?.name}, callback ${callback != null}, " +
-				"executor ${actionExecutor != null}, display $displayId, type $type",
-		)
 
 		if (callback != null) {
 			try {
 				addThroughCallback(callback, withAutoScroll)
 				return
 			} catch (t: Throwable) {
-				Logger.log("PXN ScreenshotButtons: route 1 (ActionsCallback) failed", t)
+				Logger.log(t)
 			}
 		}
 		val viewModel = fieldOfType(actionsController, "$PKG.ui.viewmodel.ScreenshotViewModel")
@@ -144,7 +135,6 @@ class ScreenshotShelfButtons(
 			.maxByOrNull { it.parameterCount }
 			?: throw IllegalStateException("no provideActionButton among ${signatures(callback.javaClass.declaredMethods.toList())}")
 		provide.isAccessible = true
-		Logger.log("PXN ScreenshotButtons: using ${provide.name}${signature(provide)}")
 
 		if (withAutoScroll) {
 			provide.invoke(callback, *fillArgs(provide, R.drawable.ic_scroll_capture, R.string.scroll_capture_label, 0) { autoScrollClicked() })
@@ -152,7 +142,6 @@ class ScreenshotShelfButtons(
 		if (deleteEnabled) {
 			provide.invoke(callback, *fillArgs(provide, R.drawable.ic_delete_screenshot, R.string.screenshot_delete_label, 0) { deleteClicked() })
 		}
-		Logger.log("PXN ScreenshotButtons: buttons added through ActionsCallback")
 	}
 
 	// ------------------------------------------------------------ route 2
@@ -173,7 +162,6 @@ class ScreenshotShelfButtons(
 			.maxByOrNull { it.parameterCount }
 			?: throw IllegalStateException("no ActionButtonViewModel constructor among ${signatures(itemClass.declaredConstructors.toList())}")
 		constructor.isAccessible = true
-		Logger.log("PXN ScreenshotButtons: using ActionButtonViewModel${signature(constructor)}")
 
 		val added = ArrayList<Any?>(current)
 		if (withAutoScroll) {
@@ -183,7 +171,6 @@ class ScreenshotShelfButtons(
 			added += constructor.newInstance(*fillArgs(constructor, R.drawable.ic_delete_screenshot, R.string.screenshot_delete_label, nextDirectId++) { deleteClicked() })
 		}
 		callMethod(flow, "setValue", added)
-		Logger.log("PXN ScreenshotButtons: buttons added through ScreenshotViewModel")
 	}
 
 	/**
@@ -249,14 +236,14 @@ class ScreenshotShelfButtons(
 
 	/** Animated dismissal through the shelf's view proxy, else ActionExecutor.finishDismiss. */
 	private fun dismissShelf() {
-		val executor = actionExecutor ?: return Logger.log("PXN ScreenshotButtons: no ActionExecutor to dismiss the shelf")
+		val executor = actionExecutor ?: return
 		try {
 			callMethod(getObjectField(executor, "viewProxy"), "requestDismissal", *arrayOf<Any?>(null))
 		} catch (t: Throwable) {
 			try {
 				callMethod(getObjectField(executor, "finishDismiss"), "invoke")
 			} catch (t2: Throwable) {
-				Logger.log("PXN ScreenshotButtons: could not dismiss the shelf", t2)
+				Logger.log(t2)
 			}
 		}
 	}
@@ -338,14 +325,22 @@ class ScreenshotShelfButtons(
 			?: throw IllegalStateException("no ActionButtonAppearance constructor among ${signatures(appearanceClass.declaredConstructors.toList())}")
 		constructor.isAccessible = true
 		// The first Drawable is the icon (a later one is the custom background).
+		// Icon only: with (icon, label, description, ...) the label is null and
+		// the text goes to the description; a lone text parameter is the
+		// description.
+		val texts = constructor.parameterTypes.count { it == CharSequence::class.java || it == String::class.java }
 		var iconGiven = false
+		var textsSeen = 0
 		val args = constructor.parameterTypes.map { type ->
 			when {
 				type == Drawable::class.java && !iconGiven -> {
 					iconGiven = true
 					drawable
 				}
-				type == CharSequence::class.java || type == String::class.java -> label
+				type == CharSequence::class.java || type == String::class.java -> {
+					textsSeen++
+					if (texts > 1 && textsSeen == 1) null else label
+				}
 				type == Boolean::class.javaPrimitiveType -> true
 				type == Int::class.javaPrimitiveType -> 0
 				else -> null
